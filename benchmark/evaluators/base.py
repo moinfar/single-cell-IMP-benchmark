@@ -1,4 +1,5 @@
 import abc
+
 import six
 
 
@@ -14,23 +15,23 @@ class AbstractEvaluator:
         pass
 
     @abc.abstractmethod
-    def generate_test_bench(self, count_file, seed=None):
+    def generate_test_bench(self, count_file_path, seed):
         """
         Generates a deterministic or probabilistic expression profile containing noise and dropout.
-        :param count_file: The file, which expression profile should be stored in.
-        :param seed: Random generator seed (if not None). To obtain reproducible results.
+        :param count_file_path: The file, which expression profile should be stored in.
+        :param seed: Random generator seed. To obtain reproducible results.
         :return: Returns a unique ID for this experiment.
         """
         pass
 
     @abc.abstractmethod
-    def evaluate_result(self, uid, processed_count_file, result_file, seed=None):
+    def evaluate_result(self, uid, processed_count_file_path, result_file, seed):
         """
         Evaluates the result obtained from an algorithm.
         :param uid: unique ID returned by `generate_test_bench` function.
-        :param processed_count_file: The result which should be evaluated.
+        :param processed_count_file_path: The result which should be evaluated.
         :param result_file: A file to store evaluation results and additional info into.
-        :param seed: Random generator seed (if not None). To obtain reproducible results.
+        :param seed: Random generator seed. To obtain reproducible results.
                      Note that evaluation may be probabilistic.
         :return: Returns a dictionary containing entries of the form "criteria": "value".
                  Note that evaluation results will also be saved in `result_file`

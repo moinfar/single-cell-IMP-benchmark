@@ -1,6 +1,11 @@
 import os
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEBUG = True
 
-CACHE_DIR = os.path.join(os.path.join(BASE_DIR, "cache"))
-RESULTS_DIR = os.path.join(os.path.join(BASE_DIR, "results"))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FILES_DIR = os.path.join(os.path.join(BASE_DIR, "files"))
+
+CACHE_DIR = os.path.join(os.path.join(FILES_DIR, "cache"))
+RESULTS_DIR = os.path.join(os.path.join(FILES_DIR, "results"))
+STORAGE_DIR = os.path.join(os.path.join(FILES_DIR, "storage"))
+IO_DIR = os.path.join(os.path.join(FILES_DIR, "io"))
