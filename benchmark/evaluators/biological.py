@@ -10,41 +10,20 @@ from sklearn.metrics.cluster import adjusted_mutual_info_score, mutual_info_scor
 
 from evaluators.base import AbstractEvaluator
 from framework.conf import settings
-from framework.utils import make_sure_dir_exists, download_file_if_not_exists, \
-    extract_compressed_file, get_uuid, log
+from utils.base import make_sure_dir_exists, get_uuid, log
+from utils.dataset import DataSet_ERP006670
 
 
 class CellCyclePreservationEvaluator(AbstractEvaluator):
-    DATA_SET_URL = "https://www.ebi.ac.uk/arrayexpress/files/E-MTAB-2805/E-MTAB-2805.processed.1.zip"
-    DATA_SET_MD5_SUM = "6e9f2611d670e14bb0fe750682843e10"
-
     def __init__(self, normalize_data_for_evaluation=True):
-        self.DATA_SET_URL = CellCyclePreservationEvaluator.DATA_SET_URL
-        self.DATA_SET_MD5_SUM = CellCyclePreservationEvaluator.DATA_SET_MD5_SUM
-
-        self.DATA_SET_FILE_PATH = os.path.join("cell_cycle", os.path.basename(self.DATA_SET_URL))
-        self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR, self.DATA_SET_FILE_PATH)
-        self.DATA_SET_DIR = "%s.d" % self.DATA_SET_FILE_PATH
-
-        self.G1_DATA_PATH = os.path.join(self.DATA_SET_DIR, "G1_singlecells_counts.txt")
-        self.G2M_DATA_PATH = os.path.join(self.DATA_SET_DIR, "G2M_singlecells_counts.txt")
-        self.S_DATA_PATH = os.path.join(self.DATA_SET_DIR, "S_singlecells_counts.txt")
-
         self.normalize_data_for_evaluation = normalize_data_for_evaluation
 
-    def _download_data_set(self):
-        make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
-        download_file_if_not_exists(self.DATA_SET_URL,
-                                    self.DATA_SET_FILE_PATH,
-                                    self.DATA_SET_MD5_SUM)
-
-    def _extract_data_set(self):
-        extract_compressed_file(self.DATA_SET_FILE_PATH, self.DATA_SET_DIR)
+        self.data_set = DataSet_ERP006670()
 
     def _load_and_combine_data(self):
-        data_G1 = pd.read_csv(self.G1_DATA_PATH, sep="\t")
-        data_G2M = pd.read_csv(self.G2M_DATA_PATH, sep="\t")
-        data_S = pd.read_csv(self.S_DATA_PATH, sep="\t")
+        data_G1 = self.data_set.get("G1")
+        data_G2M = self.data_set.get("G2M")
+        data_S = self.data_set.get("S")
 
         shared_columns = ['EnsemblGeneID', 'EnsemblTranscriptID', 'AssociatedGeneName', 'GeneLength']
 
@@ -70,8 +49,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         return merged_data
 
     def prepare(self):
-        self._download_data_set()
-        self._extract_data_set()
+        self.data_set.prepare()
 
     def generate_test_bench(self, count_file, seed):
         np.random.seed(seed)
@@ -102,7 +80,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
         return uid
 
-    def _laod_data_for_evaluation(self, uid, processed_count_file):
+    def _load_result_for_evaluation(self, uid, processed_count_file):
         column_data_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
         with open(column_data_file_path, 'r') as json_file:
             columns = json.load(json_file)
@@ -122,7 +100,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         return imputed_data
 
     def evaluate_result(self, uid, processed_count_file, result_file, seed):
-        data = self._laod_data_for_evaluation(uid, processed_count_file)
+        data = self._load_result_for_evaluation(uid, processed_count_file)
         gold_standard_classes = [colname.split("_")[0] for colname in data.columns.values]
 
         # Normalize data
