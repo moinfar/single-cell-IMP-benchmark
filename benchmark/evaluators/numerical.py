@@ -6,7 +6,7 @@ import pandas as pd
 
 from evaluators.base import AbstractEvaluator
 from framework import settings
-from utils.base import get_uuid, make_sure_dir_exists, log
+from utils.base import make_sure_dir_exists, log
 
 
 class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
@@ -20,9 +20,7 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
     def prepare(self):
         self.data.index.name = 'Symbol'
 
-    def generate_test_bench(self, count_file_path, seed):
-        np.random.seed(seed)
-        uid = get_uuid()
+    def generate_test_bench(self, uid, count_file_path):
         count_file_path = os.path.abspath(count_file_path)
 
         # Generate elimination mask
@@ -62,7 +60,7 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
 
         return uid
 
-    def evaluate_result(self, uid, processed_count_file_path, result_file, seed):
+    def evaluate_result(self, uid, processed_count_file_path, result_file):
         # Load hidden state
         hidden_state_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
         with open(hidden_state_file_path, 'r') as json_file:

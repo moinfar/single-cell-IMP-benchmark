@@ -123,5 +123,6 @@ class DataSet_10xPBMC4k(DataSet):
         matrix = mmread(self.MATRIX_DATA_PATH).todense()
 
         data = pd.DataFrame(matrix, index=gene_names, columns=barcodes)
+        data.index.name = 'GeneName'
 
         return data

@@ -10,7 +10,7 @@ from sklearn.metrics.cluster import adjusted_mutual_info_score, mutual_info_scor
 
 from evaluators.base import AbstractEvaluator
 from framework.conf import settings
-from utils.base import make_sure_dir_exists, get_uuid, log
+from utils.base import make_sure_dir_exists, log
 from utils.dataset import DataSet_ERP006670
 
 
@@ -51,10 +51,8 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
     def prepare(self):
         self.data_set.prepare()
 
-    def generate_test_bench(self, count_file, seed):
-        np.random.seed(seed)
-        uid = get_uuid()
-        count_file = os.path.abspath(count_file)
+    def generate_test_bench(self, uid, count_file_path):
+        count_file_path = os.path.abspath(count_file_path)
 
         # Load dataset
         data = self._load_and_combine_data()
@@ -74,11 +72,11 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         # rename columns and save data frame
         shuffled_data.columns = ["sample_%d" % i for i in range(len(columns))]
 
-        make_sure_dir_exists(os.path.dirname(count_file))
-        shuffled_data.to_csv(count_file, sep="\t")
-        log("Count file saved to `%s`" % count_file)
+        make_sure_dir_exists(os.path.dirname(count_file_path))
+        shuffled_data.to_csv(count_file_path, sep="\t")
+        log("Count file saved to `%s`" % count_file_path)
 
-        return uid
+        return None
 
     def _load_result_for_evaluation(self, uid, processed_count_file):
         column_data_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
@@ -99,7 +97,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
         return imputed_data
 
-    def evaluate_result(self, uid, processed_count_file, result_file, seed):
+    def evaluate_result(self, uid, processed_count_file, result_file):
         data = self._load_result_for_evaluation(uid, processed_count_file)
         gold_standard_classes = [colname.split("_")[0] for colname in data.columns.values]
 
