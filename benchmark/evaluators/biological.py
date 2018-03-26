@@ -19,12 +19,12 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
         self.normalize_data_for_evaluation = normalize_data_for_evaluation
 
-        self.data_set_class = get_data_set_class("ERP006670")
+        self.data_set = get_data_set_class("ERP006670")()
 
     def _load_and_combine_data(self):
-        data_G1 = self.data_set_class.get("G1")
-        data_G2M = self.data_set_class.get("G2M")
-        data_S = self.data_set_class.get("S")
+        data_G1 = self.data_set.get("G1")
+        data_G2M = self.data_set.get("G2M")
+        data_S = self.data_set.get("S")
 
         shared_columns = ['EnsemblGeneID', 'EnsemblTranscriptID', 'AssociatedGeneName', 'GeneLength']
 
@@ -50,7 +50,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         return merged_data
 
     def prepare(self):
-        self.data_set_class.prepare()
+        self.data_set.prepare()
 
     def generate_test_bench(self, count_file_path):
         count_file_path = os.path.abspath(count_file_path)
