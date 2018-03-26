@@ -10,20 +10,21 @@ from sklearn.metrics.cluster import adjusted_mutual_info_score, mutual_info_scor
 
 from evaluators.base import AbstractEvaluator
 from framework.conf import settings
-from utils.base import make_sure_dir_exists, log
-from utils.dataset import DataSet_ERP006670
+from utils.base import make_sure_dir_exists, log, get_data_set_class
 
 
 class CellCyclePreservationEvaluator(AbstractEvaluator):
-    def __init__(self, normalize_data_for_evaluation=True):
+    def __init__(self, uid, normalize_data_for_evaluation=True):
+        super(CellCyclePreservationEvaluator, self).__init__(uid)
+
         self.normalize_data_for_evaluation = normalize_data_for_evaluation
 
-        self.data_set = DataSet_ERP006670()
+        self.data_set_class = get_data_set_class("ERP006670")
 
     def _load_and_combine_data(self):
-        data_G1 = self.data_set.get("G1")
-        data_G2M = self.data_set.get("G2M")
-        data_S = self.data_set.get("S")
+        data_G1 = self.data_set_class.get("G1")
+        data_G2M = self.data_set_class.get("G2M")
+        data_S = self.data_set_class.get("S")
 
         shared_columns = ['EnsemblGeneID', 'EnsemblTranscriptID', 'AssociatedGeneName', 'GeneLength']
 
@@ -49,9 +50,9 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         return merged_data
 
     def prepare(self):
-        self.data_set.prepare()
+        self.data_set_class.prepare()
 
-    def generate_test_bench(self, uid, count_file_path):
+    def generate_test_bench(self, count_file_path):
         count_file_path = os.path.abspath(count_file_path)
 
         # Load dataset
@@ -63,7 +64,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
         # Save column list
         make_sure_dir_exists(settings.STORAGE_DIR)
-        column_data_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
+        column_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.json" % self.uid)
         with open(column_data_file_path, 'w') as json_file:
             columns = list(shuffled_data.columns)
             json.dump(columns, json_file)
@@ -79,7 +80,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         return None
 
     def _load_result_for_evaluation(self, uid, processed_count_file):
-        column_data_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
+        column_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.json" % uid)
         with open(column_data_file_path, 'r') as json_file:
             columns = json.load(json_file)
         imputed_data = pd.read_csv(processed_count_file, sep="\t")
@@ -97,8 +98,8 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
         return imputed_data
 
-    def evaluate_result(self, uid, processed_count_file, result_file):
-        data = self._load_result_for_evaluation(uid, processed_count_file)
+    def evaluate_result(self, processed_count_file, result_file):
+        data = self._load_result_for_evaluation(self.uid, processed_count_file)
         gold_standard_classes = [colname.split("_")[0] for colname in data.columns.values]
 
         # Normalize data

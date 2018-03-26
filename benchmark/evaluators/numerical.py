@@ -10,17 +10,21 @@ from utils.base import make_sure_dir_exists, log
 
 
 class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
-    def __init__(self, reference_data_frame, rows_ratio=0.2, columns_ratio=0.2):
-        assert type(reference_data_frame) == pd.DataFrame
+    def __init__(self, uid, reference_data_frame, rows_ratio=0.2, columns_ratio=0.2):
+        super(GridMaskedDataPredictionEvaluator, self).__init__(uid)
 
-        self.data = reference_data_frame.copy()
-        self.n_grid_rows = int(self.data.shape[0] * rows_ratio)
-        self.n_grid_columns = int(self.data.shape[1] * columns_ratio)
+        if reference_data_frame is not None:
+            assert type(reference_data_frame) == pd.DataFrame
+
+            self.data = reference_data_frame.copy()
+            self.n_grid_rows = int(self.data.shape[0] * rows_ratio)
+            self.n_grid_columns = int(self.data.shape[1] * columns_ratio)
 
     def prepare(self):
         self.data.index.name = 'Symbol'
+        self.data.columns = ["column_%d" % i for i in range(len(self.data.columns))]
 
-    def generate_test_bench(self, uid, count_file_path):
+    def generate_test_bench(self, count_file_path):
         count_file_path = os.path.abspath(count_file_path)
 
         # Generate elimination mask
@@ -47,24 +51,28 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
             'grid_columns': [int(num) for num in grid_columns],
             'column_permutation': [int(num) for num in column_permutation]
         }
-        hidden_state_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
+        hidden_state_file_path = os.path.join(settings.STORAGE_DIR, "%s.json" % self.uid)
         make_sure_dir_exists(os.path.dirname(hidden_state_file_path))
         with open(hidden_state_file_path, 'w') as json_file:
             json.dump(hidden_state, json_file)
-        log("Benchmark hidden data saved to `%s`" % hidden_state_file_path)
+        hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.pkl.xz" % self.uid)
+        make_sure_dir_exists(os.path.dirname(hidden_data_file_path))
+        self.data.to_sparse(fill_value=0).to_pickle(hidden_data_file_path, compression='xz')
+        log("Benchmark hidden data saved to `%s` and\n"
+            "                               `%s`" % (hidden_state_file_path, hidden_data_file_path))
 
         # Save test bench count file
         make_sure_dir_exists(os.path.dirname(count_file_path))
         low_quality_data.to_csv(count_file_path, sep="\t")
         log("Count file saved to `%s`" % count_file_path)
 
-        return uid
-
-    def evaluate_result(self, uid, processed_count_file_path, result_file):
-        # Load hidden state
-        hidden_state_file_path = os.path.join(settings.STORAGE_DIR, "%d.json" % uid)
+    def evaluate_result(self, processed_count_file_path, result_file):
+        # Load hidden state and data
+        hidden_state_file_path = os.path.join(settings.STORAGE_DIR, "%s.json" % self.uid)
         with open(hidden_state_file_path, 'r') as json_file:
             hidden_state = json.load(json_file)
+        hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.pkl.xz" % self.uid)
+        data = pd.read_pickle(hidden_data_file_path, compression='xz').to_dense()
 
         grid_rows = hidden_state['grid_rows']
         grid_columns = hidden_state['grid_columns']
@@ -76,18 +84,18 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
 
         # Restore column order
         imputed_data = imputed_data.iloc[:, np.argsort(column_permutation)]
-        imputed_data.columns = self.data.columns
+        imputed_data.columns = data.columns
 
         # Generate mask
-        mask = pd.DataFrame(np.zeros_like(self.data),
-                            index=self.data.index,
-                            columns=self.data.columns)
+        mask = pd.DataFrame(np.zeros_like(data),
+                            index=data.index,
+                            columns=data.columns)
         mask.iloc[grid_rows, grid_columns] = 1
 
         # Evaluation
-        diff = np.abs(np.log(1 + self.data) - np.log(1 + imputed_data))
-        mse_loss = float(np.sum(np.sum(mask * np.where(self.data != 0, 1, 0) * np.square(diff))) /
-                         np.sum(np.sum(mask * np.where(self.data != 0, 1, 0))))
+        diff = np.abs(np.log(1 + data) - np.log(1 + imputed_data))
+        mse_loss = float(np.sum(np.sum(mask * np.where(data != 0, 1, 0) * np.square(diff))) /
+                         np.sum(np.sum(mask * np.where(data != 0, 1, 0))))
 
         metric_results = {
             'MSE': mse_loss
@@ -101,11 +109,11 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
                 file.write("%s: %4f\n" % (metric, metric_results[metric]))
 
             file.write("\n## ADDITIONAL INFO:\n")
-            file.write("# GOT:\n")
-            grid = (imputed_data * np.where(self.data != 0, 1, np.NAN)).iloc[grid_rows, grid_columns]
+            file.write("# GOT (masked grid only):\n")
+            grid = (imputed_data * np.where(data != 0, 1, np.NAN)).iloc[grid_rows, grid_columns]
             file.write(grid.to_string() + "\n")
-            file.write("# GOLD STANDARD:\n")
-            grid = (self.data * np.where(self.data != 0, 1, np.NAN)).iloc[grid_rows, grid_columns]
+            file.write("# GOLD STANDARD (masked grid only):\n")
+            grid = (data * np.where(data != 0, 1, np.NAN)).iloc[grid_rows, grid_columns]
             file.write(grid.to_string() + "\n")
 
         log("Evaluation results saved to `%s`" % result_file)

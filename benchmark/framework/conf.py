@@ -12,7 +12,7 @@ def load_settings():
     settings_path = "framework.settings"
     try:
         loaded_settings = importlib.import_module(settings_path)
-        sys.stderr.write("Settings loaded successfully. \n")
+        # sys.stderr.write("Settings loaded successfully. \n")
     except ImportError as e:
         sys.stderr.write("Failed to load settings. \n")
         raise e

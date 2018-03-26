@@ -8,6 +8,12 @@ from numpy import random as np_random
 @six.add_metaclass(abc.ABCMeta)
 class AbstractEvaluator:
 
+    def __init__(self, uid):
+        """
+        :param uid: unique ID to identify current test.
+        """
+        self.uid = uid
+
     @abc.abstractmethod
     def prepare(self):
         """
@@ -17,20 +23,18 @@ class AbstractEvaluator:
         pass
 
     @abc.abstractmethod
-    def generate_test_bench(self, uid, count_file_path):
+    def generate_test_bench(self, count_file_path):
         """
         Generates a deterministic or probabilistic expression profile containing noise and dropout.
-        :param uid: unique ID to identify current test.
         :param count_file_path: The file, which expression profile should be stored in.
         :return: Returns None.
         """
         pass
 
     @abc.abstractmethod
-    def evaluate_result(self, uid, processed_count_file_path, result_file):
+    def evaluate_result(self, processed_count_file_path, result_file):
         """
         Evaluates the result obtained from an algorithm.
-        :param uid: unique ID to identify current test.
         :param processed_count_file_path: The result which should be evaluated.
         :param result_file: A file to store evaluation results and additional info into.
         :return: Returns a dictionary containing entries of the form "criteria": "value".
