@@ -1,13 +1,16 @@
+import importlib
 import os
 import sys
+
+from colorama import Fore
 
 from framework.conf import settings
 
 
-def log(message, debug=settings.DEBUG):
-    if debug:
+def log(message):
+    if settings.DEBUG:
         message = message.replace("\n", "\n    ")
-        sys.stderr.write(" >> %s\n" % message)
+        sys.stderr.write(Fore.YELLOW + (" >> %s\n" % message) + Fore.RESET)
 
 
 def make_sure_dir_exists(dire_name):
@@ -56,7 +59,7 @@ def _extract_compressed_file(source, destination):
             zip_file.extractall(destination)
             log("Extracted `%s` to \n"
                 "          `%s`" % (source, destination))
-    if source.endswith(".tar.gz"):
+    elif source.endswith(".tar.gz"):
         import tarfile
         with tarfile.open(source, "r:gz") as tar_file:
             tar_file.extractall(path=destination)
@@ -94,7 +97,13 @@ def generate_seed():
     return seed
 
 
-def get_uuid():
-    import uuid
+def load_class(class_path):
+    module_name = ".".join(class_path.split(".")[:-1])
+    class_name = class_path.split(".")[-1]
+    module = importlib.import_module(module_name)
+    loaded_class = getattr(module, class_name)
+    return loaded_class
 
-    return uuid.uuid4().int
+
+def get_data_set_class(dataset_id):
+    return load_class(settings.data_sets[dataset_id])
