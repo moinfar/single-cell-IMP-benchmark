@@ -126,3 +126,39 @@ class DataSet_10xPBMC4k(DataSet):
         data.index.name = 'GeneName'
 
         return data
+
+
+class DataSet_GSE60361(DataSet):
+    DATA_SET_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE60nnn/" \
+                   "GSE60361/suppl/GSE60361_C1-3005-Expression.txt.gz"
+    DATA_SET_MD5_SUM = "fbf6f0ec39d54d8aac7233c56d0c9e30"
+
+    def __init__(self):
+        self.DATA_SET_URL = DataSet_GSE60361.DATA_SET_URL
+        self.DATA_SET_MD5_SUM = DataSet_GSE60361.DATA_SET_MD5_SUM
+
+        self.DATA_SET_FILE_PATH = os.path.join("GSE60361", os.path.basename(self.DATA_SET_URL))
+        self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR, self.DATA_SET_FILE_PATH)
+
+        genome = "mm10"
+        self.KEYS = [genome]
+
+    def _download_data_set(self):
+        make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
+        download_file_if_not_exists(self.DATA_SET_URL,
+                                    self.DATA_SET_FILE_PATH,
+                                    self.DATA_SET_MD5_SUM)
+
+    def prepare(self):
+        self._download_data_set()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        assert key in self.keys()
+
+        data = pd.read_csv(self.DATA_SET_FILE_PATH, compression='gzip', sep="\t")
+        data = data.set_index("cell_id")
+
+        return data
