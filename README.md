@@ -34,7 +34,7 @@ Currently, these data sets are used in evaluation:
 - [ERP006670](https://www.ebi.ac.uk/arrayexpress/experiments/E-MTAB-2805/) containing different cell-cycle stages in mESC.
 - [PBMC4k](https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc4k) from 10x-genomics
 containing peripheral blood mononuclear cells from a healthy donor.
-
+- [GSE60361](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE60361) containing 3005 high-quality single-cell profiles (with about 2M read per cell).
 
 # Examples
 
