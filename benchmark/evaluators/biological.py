@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from sklearn.metrics import calinski_harabaz_score, silhouette_score
 from sklearn.metrics.cluster import adjusted_mutual_info_score, mutual_info_score, \
     homogeneity_score, completeness_score
 
@@ -31,10 +32,6 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         merged_data = pd.merge(data_G1,
                                pd.merge(data_G2M, data_S, on=shared_columns),
                                on=shared_columns)
-
-        merged_data[['EnsemblGeneID']] = np.where(merged_data[['AssociatedGeneName']].isna(),
-                                                  merged_data[['EnsemblGeneID']],
-                                                  merged_data[['AssociatedGeneName']])
 
         merged_data = merged_data.drop(columns=['EnsemblTranscriptID',
                                                 'AssociatedGeneName',
@@ -74,7 +71,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         shuffled_data.columns = ["sample_%d" % i for i in range(len(columns))]
 
         make_sure_dir_exists(os.path.dirname(count_file_path))
-        shuffled_data.to_csv(count_file_path, sep="\t")
+        shuffled_data.to_csv(count_file_path, sep=",", index_label="")
         log("Count file saved to `%s`" % count_file_path)
 
         return None
@@ -83,10 +80,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         column_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.json" % uid)
         with open(column_data_file_path, 'r') as json_file:
             columns = json.load(json_file)
-        imputed_data = pd.read_csv(processed_count_file, sep="\t")
-
-        # We assume that first column is still Symbol
-        imputed_data = imputed_data.set_index('Symbol')
+        imputed_data = pd.read_csv(processed_count_file, sep=",", index_col=0)
 
         # Restoring original column names
         imputed_data.columns = columns
@@ -111,7 +105,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         low_dim_data = pca_model.fit_transform(data.transpose())
 
         # Simple clustering
-        k_means_model = KMeans(n_clusters=3)
+        k_means_model = KMeans(n_clusters=10)
         clusters = k_means_model.fit_predict(low_dim_data)
 
         # Evaluation ...
@@ -119,7 +113,9 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
             'adjusted_mutual_info_score': adjusted_mutual_info_score(gold_standard_classes, clusters),
             'mutual_info_score': mutual_info_score(gold_standard_classes, clusters),
             'homogeneity_score': homogeneity_score(gold_standard_classes, clusters),
-            'completeness_score': completeness_score(gold_standard_classes, clusters)
+            'completeness_score': completeness_score(gold_standard_classes, clusters),
+            'calinski_harabaz_score': calinski_harabaz_score(data.transpose(), gold_standard_classes),
+            'silhouette_score': silhouette_score(data.transpose(), gold_standard_classes)
         }
 
         results = pd.DataFrame(data={
