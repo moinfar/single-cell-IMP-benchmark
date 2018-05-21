@@ -21,7 +21,6 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
             self.n_grid_columns = int(self.data.shape[1] * columns_ratio)
 
     def prepare(self):
-        self.data.index.name = 'Symbol'
         self.data.columns = ["column_%d" % i for i in range(len(self.data.columns))]
 
     def generate_test_bench(self, count_file_path):
@@ -63,7 +62,7 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
 
         # Save test bench count file
         make_sure_dir_exists(os.path.dirname(count_file_path))
-        low_quality_data.to_csv(count_file_path, sep="\t")
+        low_quality_data.to_csv(count_file_path, sep=",", index_label="")
         log("Count file saved to `%s`" % count_file_path)
 
     def evaluate_result(self, processed_count_file_path, result_file):
@@ -79,8 +78,7 @@ class GridMaskedDataPredictionEvaluator(AbstractEvaluator):
         column_permutation = hidden_state['column_permutation']
 
         # Load imputed data
-        imputed_data = pd.read_csv(processed_count_file_path, sep="\t")
-        imputed_data = imputed_data.set_index('Symbol')
+        imputed_data = pd.read_csv(processed_count_file_path, sep=",", index_col=0)
 
         # Restore column order
         imputed_data = imputed_data.iloc[:, np.argsort(column_permutation)]

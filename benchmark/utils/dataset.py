@@ -117,13 +117,13 @@ class DataSet_10xPBMC4k(DataSet):
         barcodes = [row[0] for row in barcode_data]
 
         gene_data = [row for row in csv.reader(open(self.GENE_DATA_PATH), delimiter="\t")]
-        # gene_ids = [row[0] for row in gene_data]
-        gene_names = [row[1] for row in gene_data]
+        gene_ids = [row[0] for row in gene_data]
+        # gene_names = [row[1] for row in gene_data]
 
         matrix = mmread(self.MATRIX_DATA_PATH).todense()
 
-        data = pd.DataFrame(matrix, index=gene_names, columns=barcodes)
-        data.index.name = 'GeneName'
+        data = pd.DataFrame(matrix, index=gene_ids, columns=barcodes)
+        data.index.name = 'Symbol'
 
         return data
 
