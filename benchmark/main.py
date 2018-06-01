@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 from evaluators.biological import CellCyclePreservationEvaluator
-from evaluators.numerical import GridMaskedDataPredictionEvaluator
+from evaluators.numerical import GridMaskedDataPredictionEvaluator, RandomPointMaskedDataPredictionEvaluator
 from framework.conf import settings
 from utils.base import load_class, make_sure_dir_exists, get_data_set_class
 
@@ -112,8 +112,36 @@ def generate_grid_prediction(test_id, count_file_path, data_set_name, seed, n_sa
     return uid, evaluator
 
 
+def generate_random_prediction(test_id, count_file_path, data_set_name, seed, n_samples, dropout_count):
+    uid = "%d_random_pattern" % test_id
+    data_set_name, key = data_set_name.split("-")
+    data_set = get_data_set_class(data_set_name)()
+    data_set.prepare()
+    data = data_set.get(key)
+    dropout_count = int(dropout_count)
+    if n_samples != "all":
+        np.random.seed(0)
+        n_samples = int(n_samples)
+        subset = np.random.choice(data.shape[1], n_samples, replace=False)
+        data = data.iloc[:, subset].copy()
+    evaluator = RandomPointMaskedDataPredictionEvaluator(
+        uid, reference_data_frame=data, dropout_count=dropout_count)
+    evaluator.set_seed(seed)
+    evaluator.prepare()
+    evaluator.generate_test_bench(count_file_path)
+    return uid, evaluator
+
+
 def evaluate_grid_prediction(uid, imputed_count_file_path, result_path):
     assert uid.endswith("_grid_pattern")
     evaluator = GridMaskedDataPredictionEvaluator(uid, reference_data_frame=None)
+    results = evaluator.evaluate_result(imputed_count_file_path, result_path)
+    return uid, evaluator, results
+
+
+def evaluate_random_prediction(uid, imputed_count_file_path, result_path):
+    print(uid)
+    assert uid.endswith("_random_pattern")
+    evaluator = RandomPointMaskedDataPredictionEvaluator(uid, reference_data_frame=None)
     results = evaluator.evaluate_result(imputed_count_file_path, result_path)
     return uid, evaluator, results
