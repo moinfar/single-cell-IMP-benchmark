@@ -1,106 +1,85 @@
-#!python
+import argparse
 
-"""
-deepIMP-benchmark
-A benchmarking suite to evaluate single-cell RNA-seq imputation algorithms.
+from main import generate_cell_cycle_test, handle_main_arguments, evaluate_grid_mask_test, \
+    evaluate_cell_cycle_test, generate_random_mask_test
 
-Usage:
-  run.py list benchmarks
-  run.py list tests
-  run.py list datasets
-  run.py generate cell-cycle <test_id> --output=COUNT_FILE [options]
-  run.py evaluate cell-cycle <test_id> --input=IMPUTED_FILE --result=RESULT_FILE [--is-normal] [options]
-  run.py generate grid-prediction <test_id> --output=COUNT_FILE [--dataset=DATASET] [--n-samples=N_SAMPLES] [--grid-ratio=GRID_RATIO] [options]
-  run.py evaluate grid-prediction <test_id> --input=IMPUTED_FILE --result=RESULT_FILE [options]
-  run.py generate random-prediction <test_id> --output=COUNT_FILE [--dataset=DATASET] [--n-samples=N_SAMPLES] [--dropout-count=DROPOUT_COUNT] [options]
-  run.py evaluate random-prediction <test_id> --input=IMPUTED_FILE --result=RESULT_FILE [options]
-  run.py (-h | --help)
-  run.py --version
 
--o, --output=COUNT_FILE        Address where count matrix will be stored in
--i, --input=IMPUTED_FILE       Address of file containing imputed count matrix
--r, --result=RESULT_FILE       Address where evaluation result will be stored in
+def generate_parser():
+    main_parser = argparse.ArgumentParser(description="A benchmarking suite to evaluate "
+                                                      "single-cell RNA-seq imputation algorithms.")
 
---is-normal                         Evaluator will not normalize the input if this flag is set
--d, --dataset=DATASET               Dataset to be used in a benchmark [default: 10xPBMC4k-GRCh38]
--n, --n-samples=N_SAMPLES           Number of samples used from dataset (e.g. 500) [default: all]
--g, --grid-ratio=GRID_RATIO         Ratio of the grid used in evaluator[default: 0.2x0.2]
--c, --dropout-count=DROPOUT_COUNT   number of dropouts introduced in evaluator[default: 1000]
+    main_parser.set_defaults(default_function=main_parser.print_help)
+    main_parser.add_argument('id', metavar='ID', type=int,
+                             help='unique ID to identify current benchmark.')
 
-Options:
-  -S, --seed=n                 Seed for random generator (random if not provided)
-  -D, --debug                  Prints debugging info.
-"""
+    # Define sub commands
+    subparsers = main_parser.add_subparsers(help='action to perform')
+    parser_generate = subparsers.add_parser('generate', help='generate a count file to impute')
+    subparsers_generate = parser_generate.add_subparsers(help='type of benchmark')
+    parser_evaluate = subparsers.add_parser('evaluate', help='evaluate a count file to impute')
+    subparsers_evaluate = parser_evaluate.add_subparsers(help='type of benchmark')
 
-from __future__ import print_function
+    # Define global arguments
+    main_parser.add_argument('--seed', '-S', metavar='N', type=int,
+                             help='Seed for random generator (random if not provided)')
+    main_parser.add_argument('--debug', '-D', action='store_true',
+                             help='Prints debugging info')
 
-import os
+    # Define generate commands
+    parser_generate.set_defaults(default_function=parser_generate.print_help)
+    parser_generate.add_argument('--output', '-o', metavar='COUNT_FILE',
+                                 type=str, required=True,
+                                 help='Address where noisy count matrix will be stored in')
 
-from docopt import docopt
+    parser_generate_cell_cycle = subparsers_generate.add_parser('cell-cycle')
+    parser_generate_cell_cycle.set_defaults(function=generate_cell_cycle_test)
 
-from framework.conf import settings
-from main import list_benchmarks, list_tests, list_data_sets, generate_cell_cycle, generate_grid_prediction, \
-    save_test_info, make_sure_test_exists, evaluate_cell_cycle, evaluate_grid_prediction, generate_random_prediction, \
-    evaluate_random_prediction
-from utils.base import generate_seed
+    parser_generate_random_mask = subparsers_generate.add_parser('random-mask')
+    parser_generate_random_mask.set_defaults(function=generate_random_mask_test)
+    parser_generate_random_mask.add_argument('--data-set', '-d', metavar='DATASET-KEY',
+                                             type=str, default='10xPBMC4k-GRCh38',
+                                             help='Dataset to be used in this benchmark')
+    parser_generate_random_mask.add_argument('--dropout-count', '-c', metavar='N',
+                                             type=int, required=True,
+                                             help='Number of dropouts to introduced')
+    parser_generate_random_mask.add_argument('--n-samples', '-n', metavar='N',
+                                             type=int, default=0,
+                                             help='Number of samples used from dataset'
+                                                  '(Enter 0 to use all samples.)')
+
+    # Define evaluate commands
+    parser_evaluate.set_defaults(default_function=parser_evaluate.print_help)
+    parser_evaluate.add_argument('--input', '-i', metavar='IMPUTED_COUNT_FILE',
+                                 type=str, required=True,
+                                 help='Address of file containing imputed count matrix')
+    parser_evaluate.add_argument('--result-prefix', '-r', metavar='RESULT_PREFIX',
+                                 type=str, required=True,
+                                 help='Prefix for files where evaluation result will be stored in')
+
+    parser_evaluate_cell_cycle = subparsers_evaluate.add_parser('cell-cycle')
+    parser_evaluate_cell_cycle.set_defaults(function=evaluate_cell_cycle_test)
+    parser_evaluate_cell_cycle.add_argument('--no-normalize', action='store_true',
+                                            help='This flag disables log-normalization step '
+                                                 'in this evaluator.')
+
+    parser_evaluate_grid_mask = subparsers_evaluate.add_parser('random-mask')
+    parser_evaluate_grid_mask.set_defaults(function=evaluate_grid_mask_test)
+    parser_evaluate_grid_mask.add_argument('--no-normalize', action='store_true',
+                                           help='This flag disables log-normalization step '
+                                                'in this evaluator.')
+
+    return main_parser
+
 
 if __name__ == '__main__':
-    arguments = docopt(__doc__, version='deepIMP-benchmark 0.1')
+    parser = generate_parser()
+    args = parser.parse_args()
 
-    settings.DEBUG = arguments['--debug']
-    seed = int(arguments['--seed']) if arguments['--seed'] else generate_seed()
+    print(args)
 
-    if arguments['list']:
-        if arguments['benchmarks']:
-            list_benchmarks()
-        elif arguments['tests']:
-            list_tests()
-        elif arguments['datasets']:
-            list_data_sets()
-    elif arguments['generate']:
-        test_id = int(arguments['<test_id>'])
-        count_file_path = os.path.abspath(arguments['--output'])
-        if arguments['cell-cycle']:
-            uid, evaluator = generate_cell_cycle(test_id, count_file_path)
-        elif arguments['grid-prediction']:
-            data_set_name = arguments['--dataset']
-            n_samples = arguments['--n-samples']
-            grid_ratio = arguments['--grid-ratio']
-            uid, evaluator = generate_grid_prediction(test_id, count_file_path,
-                                                      data_set_name, seed, n_samples, grid_ratio)
-        elif arguments['random-prediction']:
-            data_set_name = arguments['--dataset']
-            n_samples = arguments['--n-samples']
-            dropout_count = arguments['--dropout-count']
-            uid, evaluator = generate_random_prediction(test_id, count_file_path,
-                                                        data_set_name, seed, n_samples,
-                                                        dropout_count)
-        else:
-            raise ModuleNotFoundError
-        save_test_info(test_id, uid, count_file_path, None,
-                       evaluator, "generated")
-        print("Count file saved to `%s`" % count_file_path)
-    elif arguments['evaluate']:
-        test_id = int(arguments['<test_id>'])
-        imputed_count_file_path = os.path.abspath(arguments['--input'])
-        result_path = os.path.abspath(arguments['--result'])
-        test_info = make_sure_test_exists(test_id)
-        if arguments['cell-cycle']:
-            is_normal = arguments['--is-normal']
-            uid, evaluator, results = evaluate_cell_cycle(test_info['uid'], seed,
-                                                          is_normal, imputed_count_file_path, result_path)
-        elif arguments['grid-prediction']:
-            is_normal = arguments['--is-normal']
-            uid, evaluator, results = evaluate_grid_prediction(test_info['uid'],
-                                                               imputed_count_file_path, result_path)
-        elif arguments['random-prediction']:
-            is_normal = arguments['--is-normal']
-            uid, evaluator, results = evaluate_random_prediction(
-                test_info['uid'], imputed_count_file_path, result_path)
-        else:
-            raise ModuleNotFoundError
-        save_test_info(test_id, uid, imputed_count_file_path, result_path,
-                       evaluator, "evaluated")
-        for metric in results:
-            print("%s: %4f" % (metric, results[metric]))
-        print("Results saved to `%s`" % result_path)
+    handle_main_arguments(args)
+
+    if 'function' in args:
+        args.function(args)
+    else:
+        args.default_function()

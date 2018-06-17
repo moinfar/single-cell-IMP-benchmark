@@ -1,5 +1,7 @@
+import gzip
 import importlib
 import os
+import pickle
 import sys
 
 from colorama import Fore
@@ -105,5 +107,12 @@ def load_class(class_path):
     return loaded_class
 
 
-def get_data_set_class(dataset_id):
-    return load_class(settings.data_sets[dataset_id])
+def dump_gzip_pickle(obj, path):
+    with gzip.open(path, 'wb') as file:
+        pickle.dump(obj, file)
+
+
+def load_gzip_pickle(path):
+    with gzip.open(path, 'rb') as file:
+        obj = pickle.load(file)
+    return obj

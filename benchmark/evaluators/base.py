@@ -17,26 +17,28 @@ class AbstractEvaluator:
     @abc.abstractmethod
     def prepare(self):
         """
-        Prepare evaluator (i.g. downloading data sets, ...).
+        Prepare evaluator for test bench generation (i.g. downloading data sets, ...).
         :return: Returns None and raises exception in case of any problem.
         """
         pass
 
     @abc.abstractmethod
-    def generate_test_bench(self, count_file_path):
+    def generate_test_bench(self, count_file_path, **kwargs):
         """
         Generates a deterministic or probabilistic expression profile containing noise and dropout.
         :param count_file_path: The file, which expression profile should be stored in.
+        :param kwargs: Other evaluator specific arguments.
         :return: Returns None.
         """
         pass
 
     @abc.abstractmethod
-    def evaluate_result(self, processed_count_file_path, result_file):
+    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
         """
         Evaluates the result obtained from an algorithm.
         :param processed_count_file_path: The result which should be evaluated.
-        :param result_file: A file to store evaluation results and additional info into.
+        :param result_prefix: Prefix for files that evaluation results are stored in.
+        :param kwargs: Other evaluator specific arguments.
         :return: Returns a dictionary containing entries of the form "criteria": "value".
                  Note that evaluation results will also be saved in `result_file`
         """

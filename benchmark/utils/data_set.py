@@ -7,7 +7,11 @@ import six
 from scipy.io import mmread
 
 from framework.conf import settings
-from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file
+from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file, load_class
+
+
+def get_data_set_class(dataset_id):
+    return load_class(settings.data_sets[dataset_id])
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -159,6 +163,7 @@ class DataSet_GSE60361(DataSet):
         assert key in self.keys()
 
         data = pd.read_csv(self.DATA_SET_FILE_PATH, compression='gzip', sep="\t")
-        data = data.set_index("cell_id")
+
+        data = data.groupby(['cell_id']).sum()
 
         return data
