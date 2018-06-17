@@ -7,7 +7,11 @@ import six
 from scipy.io import mmread
 
 from framework.conf import settings
-from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file
+from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file, load_class
+
+
+def get_data_set_class(dataset_id):
+    return load_class(settings.data_sets[dataset_id])
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -117,12 +121,49 @@ class DataSet_10xPBMC4k(DataSet):
         barcodes = [row[0] for row in barcode_data]
 
         gene_data = [row for row in csv.reader(open(self.GENE_DATA_PATH), delimiter="\t")]
-        # gene_ids = [row[0] for row in gene_data]
-        gene_names = [row[1] for row in gene_data]
+        gene_ids = [row[0] for row in gene_data]
+        # gene_names = [row[1] for row in gene_data]
 
         matrix = mmread(self.MATRIX_DATA_PATH).todense()
 
-        data = pd.DataFrame(matrix, index=gene_names, columns=barcodes)
-        data.index.name = 'GeneName'
+        data = pd.DataFrame(matrix, index=gene_ids, columns=barcodes)
+        data.index.name = 'Symbol'
+
+        return data
+
+
+class DataSet_GSE60361(DataSet):
+    DATA_SET_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE60nnn/" \
+                   "GSE60361/suppl/GSE60361_C1-3005-Expression.txt.gz"
+    DATA_SET_MD5_SUM = "fbf6f0ec39d54d8aac7233c56d0c9e30"
+
+    def __init__(self):
+        self.DATA_SET_URL = DataSet_GSE60361.DATA_SET_URL
+        self.DATA_SET_MD5_SUM = DataSet_GSE60361.DATA_SET_MD5_SUM
+
+        self.DATA_SET_FILE_PATH = os.path.join("GSE60361", os.path.basename(self.DATA_SET_URL))
+        self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR, self.DATA_SET_FILE_PATH)
+
+        genome = "mm10"
+        self.KEYS = [genome]
+
+    def _download_data_set(self):
+        make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
+        download_file_if_not_exists(self.DATA_SET_URL,
+                                    self.DATA_SET_FILE_PATH,
+                                    self.DATA_SET_MD5_SUM)
+
+    def prepare(self):
+        self._download_data_set()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        assert key in self.keys()
+
+        data = pd.read_csv(self.DATA_SET_FILE_PATH, compression='gzip', sep="\t")
+
+        data = data.groupby(['cell_id']).sum()
 
         return data
