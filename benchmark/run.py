@@ -1,7 +1,7 @@
 import argparse
 
 from main import generate_cell_cycle_test, handle_main_arguments, evaluate_grid_mask_test, \
-    evaluate_cell_cycle_test, generate_random_mask_test
+    evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test
 
 
 def generate_parser():
@@ -41,10 +41,23 @@ def generate_parser():
                                              help='Dataset to be used in this benchmark')
     parser_generate_random_mask.add_argument('--dropout-count', '-c', metavar='N',
                                              type=int, required=True,
-                                             help='Number of dropouts to introduced')
+                                             help='Number of dropouts to introduce')
     parser_generate_random_mask.add_argument('--n-samples', '-n', metavar='N',
                                              type=int, default=0,
-                                             help='Number of samples used from dataset'
+                                             help='Number of samples (cells) used from dataset'
+                                                  '(Enter 0 to use all samples.)')
+
+    parser_generate_down_sample = subparsers_generate.add_parser('down-sample')
+    parser_generate_down_sample.set_defaults(function=generate_down_sample_test)
+    parser_generate_down_sample.add_argument('--data-set', '-d', metavar='DATASET-KEY',
+                                             type=str, default='10xPBMC4k-GRCh38',
+                                             help='Dataset to be used in this benchmark')
+    parser_generate_down_sample.add_argument('--read-ratio', '-r', metavar='RATIO',
+                                             type=float, required=True,
+                                             help='Ratio of reads compared to original dataset')
+    parser_generate_down_sample.add_argument('--n-samples', '-n', metavar='N',
+                                             type=int, default=0,
+                                             help='Number of samples (cells) used from dataset'
                                                   '(Enter 0 to use all samples.)')
 
     # Define evaluate commands
@@ -67,6 +80,12 @@ def generate_parser():
     parser_evaluate_grid_mask.add_argument('--no-normalize', action='store_true',
                                            help='This flag disables log-normalization step '
                                                 'in this evaluator.')
+
+    parser_evaluate_down_sample = subparsers_evaluate.add_parser('down-sample')
+    parser_evaluate_down_sample.set_defaults(function=evaluate_down_sample_test)
+    parser_evaluate_down_sample.add_argument('--no-normalize', action='store_true',
+                                             help='This flag disables log-normalization step '
+                                                  'in this evaluator.')
 
     return main_parser
 
