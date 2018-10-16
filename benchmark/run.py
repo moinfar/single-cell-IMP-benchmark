@@ -30,9 +30,15 @@ def generate_parser():
     parser_generate.add_argument('--output', '-o', metavar='COUNT_FILE',
                                  type=str, required=True,
                                  help='Address where noisy count matrix will be stored in')
+    parser_generate.add_argument('--preserve-columns', '-p', action='store_true',
+                                 help='Preserve column orders and labels if using a real dataset.')
 
     parser_generate_cell_cycle = subparsers_generate.add_parser('cell-cycle')
     parser_generate_cell_cycle.set_defaults(function=generate_cell_cycle_test)
+    parser_generate_cell_cycle.add_argument('--rm-ercc', action='store_true',
+                                            help='Remove ERCC rows from generated expression table.')
+    parser_generate_cell_cycle.add_argument('--rm-mt', action='store_true',
+                                            help='Remove mitochondrial genes from generated expression table.')
 
     parser_generate_random_mask = subparsers_generate.add_parser('random-mask')
     parser_generate_random_mask.set_defaults(function=generate_random_mask_test)

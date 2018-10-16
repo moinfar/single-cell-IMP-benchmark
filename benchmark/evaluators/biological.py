@@ -58,12 +58,23 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
     def generate_test_bench(self, count_file_path, **kwargs):
         count_file_path = os.path.abspath(count_file_path)
+        rm_ercc = kwargs['rm_ercc']
+        rm_mt = kwargs['rm_mt']
+        preserve_columns = kwargs['preserve_columns']
 
         # Load dataset
         data = self._load_and_combine_data()
 
+        # Remove some rows
+        if rm_ercc:
+            remove_list = [symbol for symbol in data.index.values if symbol.startswith("ERCC-")]
+            data = data.drop(remove_list)
+        if rm_mt:
+            remove_list = [symbol for symbol in data.index.values if symbol.startswith("mt-")]
+            data = data.drop(remove_list)
+
         # Shuffle columns
-        new_data, original_columns, column_permutation = shuffle_and_rename_columns(data)
+        new_data, original_columns, column_permutation = shuffle_and_rename_columns(data, disabled=preserve_columns)
 
         # Save hidden data
         make_sure_dir_exists(settings.STORAGE_DIR)

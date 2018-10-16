@@ -42,6 +42,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
     def generate_test_bench(self, count_file_path, **kwargs):
         n_samples = kwargs['n_samples']
         dropout_count = kwargs['dropout_count']
+        preserve_columns = kwargs['preserve_columns']
 
         count_file_path = os.path.abspath(count_file_path)
         data = self._load_data(n_samples)
@@ -75,7 +76,8 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
         low_quality_data = low_quality_data[np.sum(low_quality_data, axis=1) > 0].copy()
 
         # Shuffle columns
-        low_quality_data, original_columns, column_permutation = shuffle_and_rename_columns(low_quality_data)
+        low_quality_data, original_columns, column_permutation = \
+            shuffle_and_rename_columns(low_quality_data, disabled=preserve_columns)
 
         # Save hidden data
         make_sure_dir_exists(settings.STORAGE_DIR)
@@ -182,6 +184,7 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
     def generate_test_bench(self, count_file_path, **kwargs):
         n_samples = kwargs['n_samples']
         read_ratio = kwargs['read_ratio']
+        preserve_columns = kwargs['preserve_columns']
 
         count_file_path = os.path.abspath(count_file_path)
         data = self._load_data(n_samples)
@@ -206,7 +209,8 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         low_quality_data = pd.DataFrame(low_quality_data, index=data.index, columns=data.columns)
 
         # Shuffle columns
-        low_quality_data, original_columns, column_permutation = shuffle_and_rename_columns(low_quality_data)
+        low_quality_data, original_columns, column_permutation = \
+            shuffle_and_rename_columns(low_quality_data, disabled=preserve_columns)
 
         # Remove zero rows
         data = data[np.sum(low_quality_data, axis=1) > 0].copy()

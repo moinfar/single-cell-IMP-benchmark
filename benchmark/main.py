@@ -10,7 +10,7 @@ def handle_main_arguments(args):
 
 
 def print_metric_results(results):
-    for metric in results:
+    for metric in sorted(results.keys()):
         print("%s: %4f" % (metric, results[metric]))
 
 
@@ -19,7 +19,8 @@ def generate_cell_cycle_test(args):
     evaluator = CellCyclePreservationEvaluator(uid)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
-    evaluator.generate_test_bench(args.output)
+    evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns,
+                                  rm_ercc=args.rm_ercc, rm_mt=args.rm_mt)
 
 
 def generate_random_mask_test(args):
@@ -27,7 +28,7 @@ def generate_random_mask_test(args):
     evaluator = RandomMaskedLocationPredictionEvaluator(uid, args.data_set)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
-    evaluator.generate_test_bench(args.output, n_samples=args.n_samples,
+    evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns, n_samples=args.n_samples,
                                   dropout_count=args.dropout_count)
 
 
@@ -36,7 +37,7 @@ def generate_down_sample_test(args):
     evaluator = DownSampledDataReconstructionEvaluator(uid, args.data_set)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
-    evaluator.generate_test_bench(args.output, n_samples=args.n_samples,
+    evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns, n_samples=args.n_samples,
                                   read_ratio=args.read_ratio)
 
 
