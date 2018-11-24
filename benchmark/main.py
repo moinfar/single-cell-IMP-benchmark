@@ -1,4 +1,4 @@
-from evaluators.biological import CellCyclePreservationEvaluator
+from evaluators.biological import CellCyclePreservationEvaluator, ClusteringEvaluator
 from evaluators.numerical import RandomMaskedLocationPredictionEvaluator, DownSampledDataReconstructionEvaluator
 from framework.conf import settings
 from utils.base import generate_seed
@@ -15,25 +15,34 @@ def print_metric_results(results):
 
 
 def generate_cell_cycle_test(args):
-    uid = "%d_cell_cycle" % args.id
+    uid = "%s_cell_cycle" % args.id
     evaluator = CellCyclePreservationEvaluator(uid)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
     evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns,
-                                  rm_ercc=args.rm_ercc, rm_mt=args.rm_mt)
+                                  rm_ercc=args.rm_ercc, rm_mt=args.rm_mt, rm_lq=args.rm_lq)
+
+
+def generate_clustering_test(args):
+    uid = "%s_clustering" % args.id
+    evaluator = ClusteringEvaluator(uid, args.data_set)
+    evaluator.prepare()
+    evaluator.set_seed(args.seed)
+    evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns)
 
 
 def generate_random_mask_test(args):
-    uid = "%d_random_mask" % args.id
+    uid = "%s_random_mask" % args.id
     evaluator = RandomMaskedLocationPredictionEvaluator(uid, args.data_set)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
-    evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns, n_samples=args.n_samples,
-                                  dropout_count=args.dropout_count)
+    evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns,
+                                  n_samples=args.n_samples, dropout_count=args.dropout_count,
+                                  min_expression=args.min_expression, hvg_frac=args.hvg_frac)
 
 
 def generate_down_sample_test(args):
-    uid = "%d_down_sample" % args.id
+    uid = "%s_down_sample" % args.id
     evaluator = DownSampledDataReconstructionEvaluator(uid, args.data_set)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
@@ -42,27 +51,35 @@ def generate_down_sample_test(args):
 
 
 def evaluate_cell_cycle_test(args):
-    uid = "%d_cell_cycle" % args.id
+    uid = "%s_cell_cycle" % args.id
     evaluator = CellCyclePreservationEvaluator(uid)
     evaluator.set_seed(args.seed)
     results = evaluator.evaluate_result(args.input, args.result_prefix,
-                                        no_normalize=args.no_normalize)
+                                        normalization=args.normalization, transformation=args.transformation)
     print_metric_results(results)
 
 
-def evaluate_grid_mask_test(args):
-    uid = "%d_random_mask" % args.id
-    evaluator = RandomMaskedLocationPredictionEvaluator(uid)
+def evaluate_clustering_test(args):
+    uid = "%s_clustering" % args.id
+    evaluator = ClusteringEvaluator(uid)
     evaluator.set_seed(args.seed)
     results = evaluator.evaluate_result(args.input, args.result_prefix,
-                                        no_normalize=args.no_normalize)
+                                        normalization=args.normalization, transformation=args.transformation)
+    print_metric_results(results)
+
+
+def evaluate_random_mask_test(args):
+    uid = "%s_random_mask" % args.id
+    evaluator = RandomMaskedLocationPredictionEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    results = evaluator.evaluate_result(args.input, args.result_prefix)
     print_metric_results(results)
 
 
 def evaluate_down_sample_test(args):
-    uid = "%d_down_sample" % args.id
+    uid = "%s_down_sample" % args.id
     evaluator = DownSampledDataReconstructionEvaluator(uid)
     evaluator.set_seed(args.seed)
     results = evaluator.evaluate_result(args.input, args.result_prefix,
-                                        no_normalize=args.no_normalize)
+                                        transformation=args.transformation)
     print_metric_results(results)

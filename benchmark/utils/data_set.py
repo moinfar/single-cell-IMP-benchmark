@@ -8,6 +8,7 @@ from scipy.io import mmread
 
 from framework.conf import settings
 from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file, load_class
+from utils.data_table import read_csv
 
 
 def get_data_set_class(dataset_id):
@@ -96,7 +97,7 @@ class DataSet_10xPBMC4k(DataSet):
         self.GENE_DATA_PATH = os.path.join(files_dir, "genes.tsv")
         self.MATRIX_DATA_PATH = os.path.join(files_dir, "matrix.mtx")
 
-        self.KEYS = [genome]
+        self.KEYS = [genome, "data"]
 
     def _download_data_set(self):
         make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
@@ -133,9 +134,12 @@ class DataSet_10xPBMC4k(DataSet):
 
 
 class DataSet_GSE60361(DataSet):
-    DATA_SET_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE60nnn/" \
-                   "GSE60361/suppl/GSE60361_C1-3005-Expression.txt.gz"
-    DATA_SET_MD5_SUM = "fbf6f0ec39d54d8aac7233c56d0c9e30"
+    # DATA_SET_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE60nnn/" \
+    #                "GSE60361/suppl/GSE60361_C1-3005-Expression.txt.gz"
+    # DATA_SET_MD5_SUM = "fbf6f0ec39d54d8aac7233c56d0c9e30"
+    DATA_SET_URL = "https://storage.googleapis.com/linnarsson-lab-www-blobs/" \
+                   "blobs/cortex/expression_mRNA_17-Aug-2014.txt"
+    DATA_SET_MD5_SUM = "6bb4c2a9ade87b16909d39004021849e"
 
     def __init__(self):
         self.DATA_SET_URL = DataSet_GSE60361.DATA_SET_URL
@@ -144,8 +148,7 @@ class DataSet_GSE60361(DataSet):
         self.DATA_SET_FILE_PATH = os.path.join("GSE60361", os.path.basename(self.DATA_SET_URL))
         self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR, self.DATA_SET_FILE_PATH)
 
-        genome = "mm10"
-        self.KEYS = [genome]
+        self.KEYS = ["mRNA", "details", "data"]
 
     def _download_data_set(self):
         make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
@@ -162,8 +165,19 @@ class DataSet_GSE60361(DataSet):
     def get(self, key):
         assert key in self.keys()
 
-        data = pd.read_csv(self.DATA_SET_FILE_PATH, compression='gzip', sep="\t")
-
-        data = data.groupby(['cell_id']).sum()
-
-        return data
+        if key == "mRNA" or key == "data":
+            full_data = read_csv(self.DATA_SET_FILE_PATH, header=None)
+            data = full_data.iloc[11:-1, 1:3006]
+            data.columns = full_data.iloc[7, 1:3006]
+            data.index.name = ""
+            data.columns.name = ""
+            data = data.astype("int64")
+            return data
+        elif key == "details":
+            full_data = read_csv(self.DATA_SET_FILE_PATH, header=None)
+            data = full_data.iloc[:10, 1:3006]
+            data.columns = full_data.iloc[7, 1:3006]
+            data.index = full_data.iloc[:10, 0].values
+            data.index.name = ""
+            data.columns.name = ""
+            return data

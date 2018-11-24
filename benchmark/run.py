@@ -1,7 +1,9 @@
 import argparse
 
-from main import generate_cell_cycle_test, handle_main_arguments, evaluate_grid_mask_test, \
-    evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test
+from main import generate_cell_cycle_test, handle_main_arguments, evaluate_random_mask_test, \
+    evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test, \
+    generate_clustering_test, evaluate_clustering_test
+from utils.base import log
 
 
 def generate_parser():
@@ -9,7 +11,7 @@ def generate_parser():
                                                       "single-cell RNA-seq imputation algorithms.")
 
     main_parser.set_defaults(default_function=main_parser.print_help)
-    main_parser.add_argument('id', metavar='ID', type=int,
+    main_parser.add_argument('id', metavar='ID', type=str,
                              help='unique ID to identify current benchmark.')
 
     # Define sub commands
@@ -39,15 +41,30 @@ def generate_parser():
                                             help='Remove ERCC rows from generated expression table.')
     parser_generate_cell_cycle.add_argument('--rm-mt', action='store_true',
                                             help='Remove mitochondrial genes from generated expression table.')
+    parser_generate_cell_cycle.add_argument('--rm-lq', action='store_true',
+                                            help='Remove low quality cells.')
+
+    parser_generate_clustering = subparsers_generate.add_parser('clustering')
+    parser_generate_clustering.set_defaults(function=generate_clustering_test)
+    parser_generate_clustering.add_argument('--data-set', '-d', metavar='DATASET',
+                                            type=str, default='CORTEX_3005',
+                                            help='Dataset to be used in this benchmark')
 
     parser_generate_random_mask = subparsers_generate.add_parser('random-mask')
     parser_generate_random_mask.set_defaults(function=generate_random_mask_test)
-    parser_generate_random_mask.add_argument('--data-set', '-d', metavar='DATASET-KEY',
-                                             type=str, default='10xPBMC4k-GRCh38',
+    parser_generate_random_mask.add_argument('--data-set', '-d', metavar='DATASET',
+                                             type=str, default='10xPBMC4k',
                                              help='Dataset to be used in this benchmark')
     parser_generate_random_mask.add_argument('--dropout-count', '-c', metavar='N',
                                              type=int, required=True,
                                              help='Number of dropouts to introduce')
+    parser_generate_random_mask.add_argument('--min-expression', '-m', metavar='M',
+                                             type=int, default=10,
+                                             help='Minimum expression for an entry to be dropped')
+    parser_generate_random_mask.add_argument('--hvg-frac', '-f', metavar='F',
+                                             type=float, default=0.05,
+                                             help='Fraction of genes that are considered as HVG '
+                                                  '(entries from non-HVG gees will not be dropped)')
     parser_generate_random_mask.add_argument('--n-samples', '-n', metavar='N',
                                              type=int, default=0,
                                              help='Number of samples (cells) used from dataset'
@@ -77,21 +94,25 @@ def generate_parser():
 
     parser_evaluate_cell_cycle = subparsers_evaluate.add_parser('cell-cycle')
     parser_evaluate_cell_cycle.set_defaults(function=evaluate_cell_cycle_test)
-    parser_evaluate_cell_cycle.add_argument('--no-normalize', action='store_true',
-                                            help='This flag disables log-normalization step '
-                                                 'in this evaluator.')
+    parser_evaluate_cell_cycle.add_argument('--normalization', "-n", choices=['none', 'l1', 'l2'], default='l1',
+                                            help='Normalization to be applied before transformation and evaluation.')
+    parser_evaluate_cell_cycle.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
+                                            help='Transformation to be applied before evaluation.')
 
-    parser_evaluate_grid_mask = subparsers_evaluate.add_parser('random-mask')
-    parser_evaluate_grid_mask.set_defaults(function=evaluate_grid_mask_test)
-    parser_evaluate_grid_mask.add_argument('--no-normalize', action='store_true',
-                                           help='This flag disables log-normalization step '
-                                                'in this evaluator.')
+    parser_evaluate_clustering = subparsers_evaluate.add_parser('clustering')
+    parser_evaluate_clustering.set_defaults(function=evaluate_clustering_test)
+    parser_evaluate_clustering.add_argument('--normalization', "-n", choices=['none', 'l1', 'l2'], default='l1',
+                                            help='Normalization to be applied before transformation and evaluation.')
+    parser_evaluate_clustering.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
+                                            help='Transformation to be applied before evaluation.')
+
+    parser_evaluate_random_mask = subparsers_evaluate.add_parser('random-mask')
+    parser_evaluate_random_mask.set_defaults(function=evaluate_random_mask_test)
 
     parser_evaluate_down_sample = subparsers_evaluate.add_parser('down-sample')
     parser_evaluate_down_sample.set_defaults(function=evaluate_down_sample_test)
-    parser_evaluate_down_sample.add_argument('--no-normalize', action='store_true',
-                                             help='This flag disables log-normalization step '
-                                                  'in this evaluator.')
+    parser_evaluate_down_sample.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
+                                             help='Transformation to be applied before evaluation.')
 
     return main_parser
 
@@ -100,7 +121,7 @@ if __name__ == '__main__':
     parser = generate_parser()
     args = parser.parse_args()
 
-    print(args)
+    log(str(args))
 
     handle_main_arguments(args)
 

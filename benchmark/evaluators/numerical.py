@@ -2,13 +2,17 @@ import os
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objs as go
+import plotly.io as pio
 from scipy.spatial.distance import pdist
+from scipy.stats import pearsonr, spearmanr
 
 from evaluators.base import AbstractEvaluator
 from framework import settings
 from utils.base import make_sure_dir_exists, log, dump_gzip_pickle, load_gzip_pickle
 from utils.data_set import get_data_set_class
-from utils.data_table import shuffle_and_rename_columns, rearrange_and_rename_columns
+from utils.data_table import shuffle_and_rename_columns, rearrange_and_rename_columns, write_csv, read_table_file
+from utils.other import transformations
 
 
 class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
@@ -22,14 +26,13 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
         if self.data_set_name is None:
             raise ValueError("data_set_name can not be None.")
 
-        data_set_id, _ = self.data_set_name.split("-")
-        self.data_set = get_data_set_class(data_set_id)()
+        self.data_set = get_data_set_class(self.data_set_name)()
         self.data_set.prepare()
 
     def _load_data(self, n_samples):
-        _, data_key = self.data_set_name.split("-")
-        data = self.data_set.get(data_key)
-        data.columns = ["column_%d" % i for i in range(len(data.columns))]
+        assert "data" in self.data_set.keys()
+
+        data = self.data_set.get("data")
 
         if n_samples is None or n_samples == 0:
             pass
@@ -39,21 +42,43 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         return data
 
+    @staticmethod
+    def get_hvg_genes(data, hvg_frac):
+        gene_means = np.log(data.mean(axis=1))
+        gene_vars = 2 * np.log(data.std(axis=1))
+
+        hvg_indices = set()
+
+        for x in np.arange(0, gene_means.max(), 0.5):
+            related_indices = np.where(np.logical_and(x <= gene_means, gene_means < x + 1))[0]
+            if related_indices.shape[0] == 0:
+                continue
+            threshold = np.quantile((gene_vars - gene_means)[related_indices], 1 - hvg_frac)
+            hvg_indices.update(list(np.where(np.logical_and.reduce((x <= gene_means,
+                                                                    gene_means < x + 1,
+                                                                    gene_vars - gene_means >= threshold)))[0]))
+
+        return list(sorted(list(hvg_indices)))
+
     def generate_test_bench(self, count_file_path, **kwargs):
         n_samples = kwargs['n_samples']
         dropout_count = kwargs['dropout_count']
+        min_expression = kwargs['min_expression']
+        hvg_frac = kwargs['hvg_frac']
         preserve_columns = kwargs['preserve_columns']
 
         count_file_path = os.path.abspath(count_file_path)
         data = self._load_data(n_samples)
 
+        hvg_indices = self.get_hvg_genes(data, hvg_frac)
+
         # Generate elimination mask
         non_zero_locations = []
 
         data_values = data.values
-        for x in range(data.shape[0]):
+        for x in hvg_indices:
             for y in range(data.shape[1]):
-                if data_values[x, y] > 0:
+                if data_values[x, y] > min_expression:
                     non_zero_locations.append((x, y))
         del data_values
 
@@ -82,62 +107,91 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
         # Save hidden data
         make_sure_dir_exists(settings.STORAGE_DIR)
         hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
-        dump_gzip_pickle([data.to_sparse(), mask.to_sparse(), original_columns, column_permutation],
+        dump_gzip_pickle([data.to_sparse(), mask.to_sparse(), hvg_indices, original_columns, column_permutation],
                          hidden_data_file_path)
         log("Benchmark hidden data saved to `%s`" % hidden_data_file_path)
 
         make_sure_dir_exists(os.path.dirname(count_file_path))
-        low_quality_data.to_csv(count_file_path, sep=",", index_label="")
+        write_csv(low_quality_data, count_file_path)
         log("Count file saved to `%s`" % count_file_path)
 
     def _load_hidden_state(self):
         hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
-        sparse_data, sparse_mask, original_columns, column_permutation = load_gzip_pickle(hidden_data_file_path)
+        sparse_data, sparse_mask, hvg_indices, original_columns, column_permutation = \
+            load_gzip_pickle(hidden_data_file_path)
         data = sparse_data.to_dense()
         mask = sparse_mask.to_dense()
 
         del sparse_data
         del sparse_mask
 
-        return data, mask, original_columns, column_permutation
+        return data, mask, hvg_indices, original_columns, column_permutation
 
     def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
         # Load hidden state and data
-        data, mask, original_columns, column_permutation = self._load_hidden_state()
+        data, mask, hvg_indices, original_columns, column_permutation = self._load_hidden_state()
 
         # Load imputed data
-        imputed_data = pd.read_csv(processed_count_file_path, sep=",", index_col=0)
+        imputed_data = read_table_file(processed_count_file_path)
 
         # Restore column names and order
         imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
 
-        # Log-transform data
-        if not ('no_normalize' in kwargs and kwargs['no_normalize']):
-            data = np.log10(1 + data)
-            imputed_data = np.log10(1 + imputed_data)
-
         # Evaluation
-        diff = np.abs(data - imputed_data)
+        log_diff = np.abs(transformations["log"](data) - transformations["log"](imputed_data))
+        sqrt_diff = np.abs(transformations["sqrt"](data) - transformations["sqrt"](imputed_data))
 
-        mse_loss = float(np.sum(np.sum(mask * np.where(data != 0, 1, 0) * np.square(diff))) /
-                         np.sum(np.sum(mask * np.where(data != 0, 1, 0))))
+        mse_on_log = float(np.sum(np.sum(mask * np.where(data != 0, 1, 0) * np.square(log_diff))) /
+                           np.sum(np.sum(mask * np.where(data != 0, 1, 0))))
+        mae_on_log = float(np.sum(np.sum(mask * np.where(data != 0, 1, 0) * np.abs(log_diff))) /
+                           np.sum(np.sum(mask * np.where(data != 0, 1, 0))))
+        mse_on_sqrt = float(np.sum(np.sum(mask * np.where(data != 0, 1, 0) * np.square(sqrt_diff))) /
+                            np.sum(np.sum(mask * np.where(data != 0, 1, 0))))
+        mae_on_sqrt = float(np.sum(np.sum(mask * np.where(data != 0, 1, 0) * np.abs(sqrt_diff))) /
+                            np.sum(np.sum(mask * np.where(data != 0, 1, 0))))
 
         metric_results = {
-            'MSE': mse_loss
+            'RMSE_sqrt': mse_on_sqrt ** 0.5,
+            'MAE_sqrt': mae_on_sqrt,
+            'RMSE_log': mse_on_log ** 0.5,
+            'MAE_log': mae_on_log
         }
 
         masked_locations = []
         mask_values = mask.values
-        for x in range(mask_values.shape[0]):
+        for x in hvg_indices:
             for y in range(mask_values.shape[1]):
                 if mask_values[x, y] == 1:
                     masked_locations.append((x, y))
+
+        original_values = []
+        predicted_values = []
+        for (x, y) in masked_locations:
+            original_values.append(data.iloc[x, y])
+            predicted_values.append(imputed_data.iloc[x, y])
+
+        original_values = np.asarray(original_values)
+        predicted_values = np.asarray(predicted_values)
+
+        fig = go.Figure(layout=go.Layout(title='Prediction plot', font=dict(size=12)))
+        fig.add_scatter(x=transformations["log"](original_values),
+                        y=transformations["log"](predicted_values),
+                        mode='markers', marker=dict(opacity=0.3))
+        pio.write_image(fig, "%s_prediction_plot_log_scale.pdf" % result_prefix,
+                        width=800, height=600)
+
+        fig = go.Figure(layout=go.Layout(title='Prediction plot', font=dict(size=12)))
+        fig.add_scatter(x=transformations["sqrt"](original_values),
+                        y=transformations["sqrt"](predicted_values),
+                        mode='markers', marker=dict(opacity=0.3))
+        pio.write_image(fig, "%s_prediction_plot_sqrt_scale.pdf" % result_prefix,
+                        width=800, height=600)
 
         # Save results to a file
         make_sure_dir_exists(os.path.dirname(result_prefix))
         with open("%s_summary_all.txt" % result_prefix, 'w') as file:
             file.write("## METRICS:\n")
-            for metric in metric_results:
+            for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, metric_results[metric]))
 
             file.write("##\n## ADDITIONAL INFO:\n")
@@ -164,14 +218,13 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         if self.data_set_name is None:
             raise ValueError("data_set_name can not be None.")
 
-        data_set_id, _ = self.data_set_name.split("-")
-        self.data_set = get_data_set_class(data_set_id)()
+        self.data_set = get_data_set_class(self.data_set_name)()
         self.data_set.prepare()
 
     def _load_data(self, n_samples):
-        _, data_key = self.data_set_name.split("-")
-        data = self.data_set.get(data_key)
-        data.columns = ["column_%d" % i for i in range(len(data.columns))]
+        assert "data" in self.data_set.keys()
+
+        data = self.data_set.get("data")
 
         if n_samples is None or n_samples == 0:
             pass
@@ -224,7 +277,7 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         log("Benchmark hidden data saved to `%s`" % hidden_data_file_path)
 
         make_sure_dir_exists(os.path.dirname(count_file_path))
-        low_quality_data.to_csv(count_file_path, sep=",", index_label="")
+        write_csv(low_quality_data, count_file_path)
         log("Count file saved to `%s`" % count_file_path)
 
     def _load_hidden_state(self):
@@ -236,19 +289,20 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         return scaled_data, original_columns, column_permutation
 
     def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+        transformation = kwargs['transformation']
+
         # Load hidden state and data
         scaled_data, original_columns, column_permutation = self._load_hidden_state()
 
         # Load imputed data
-        imputed_data = pd.read_csv(processed_count_file_path, sep=",", index_col=0)
+        imputed_data = read_table_file(processed_count_file_path)
 
         # Restore column names and order
         imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
 
-        # Log-transform data
-        if not ('no_normalize' in kwargs and kwargs['no_normalize']):
-            scaled_data = np.log10(1 + scaled_data)
-            imputed_data = np.log10(1 + imputed_data)
+        # Data transformation
+        scaled_data = transformations[transformation](scaled_data)
+        imputed_data = transformations[transformation](imputed_data)
 
         # Evaluation
         mse_distances = []
@@ -260,26 +314,51 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         for i in range(scaled_data.shape[1]):
             x = scaled_data.values[:, i]
             y = imputed_data.values[:, i]
-            mse_distances.append(np.mean(np.where(x != 0, 1, 0) * np.square(x - y)))
+            mse_distances.append(float(np.mean(np.where(x != 0, 1, 0) * np.square(x - y))))
             euclidean_distances.append(pdist(np.vstack((x, y)), 'euclidean')[0])
             sqeuclidean_distances.append(pdist(np.vstack((x, y)), 'sqeuclidean')[0])
             cosine_distances.append(pdist(np.vstack((x, y)), 'cosine')[0])
             correlation_distances.append(pdist(np.vstack((x, y)), 'correlation')[0])
 
+        pearson_corrs = []
+        spearman_corrs = []
+        pearson_corrs_on_nonzeros = []
+        spearman_corrs_on_nonzeros = []
+
+        for g in range(scaled_data.shape[0]):
+            x = scaled_data.values[g, :]
+            y = imputed_data.values[g, :]
+            nonzero_x_indices = np.nonzero(x > 0)[0]
+            pearson_corrs.append(pearsonr(x, y)[0])
+            spearman_corrs.append(spearmanr(x, y)[0])
+            np.save("x", x[nonzero_x_indices])
+            np.save("y", y[nonzero_x_indices])
+            if len(nonzero_x_indices) != 0 and np.std(x[nonzero_x_indices]) > 1e-10:
+                if np.std(y[nonzero_x_indices]) < 1e-10:
+                    pearson_corrs_on_nonzeros.append(0)
+                    spearman_corrs_on_nonzeros.append(0)
+                else:
+                    pearson_corrs_on_nonzeros.append(pearsonr(x[nonzero_x_indices], y[nonzero_x_indices])[0])
+                    spearman_corrs_on_nonzeros.append(spearmanr(x[nonzero_x_indices], y[nonzero_x_indices])[0])
+
         metric_results = {
-            'mean_squared_error_on_non_zeros': np.mean(mse_distances),
-            'mean_euclidean_distance': np.mean(euclidean_distances),
-            'mean_sqeuclidean_distance': np.mean(sqeuclidean_distances),
-            'mean_cosine_distance': np.mean(cosine_distances),
-            'mean_correlation_distance': np.mean(correlation_distances)
+            'cell_mean_squared_error_on_non_zeros': np.mean(mse_distances),
+            'cell_mean_euclidean_distance': np.mean(euclidean_distances),
+            'cell_mean_sqeuclidean_distance': np.mean(sqeuclidean_distances),
+            'cell_mean_cosine_distance': np.mean(cosine_distances),
+            'cell_mean_correlation_distance': np.mean(correlation_distances),
+            'gene_mean_pearson_corrs': np.mean(pearson_corrs),
+            'gene_mean_spearman_corrs': np.mean(spearman_corrs),
+            'gene_mean_pearson_corrs_on_nonzeros': np.mean(pearson_corrs_on_nonzeros),
+            'gene_mean_spearman_corrs_on_nonzeros': np.mean(spearman_corrs_on_nonzeros),
         }
 
         # Save results to a file
         make_sure_dir_exists(os.path.dirname(result_prefix))
         with open("%s_summary_all.txt" % result_prefix, 'w') as file:
             file.write("## METRICS:\n")
-            for metric in metric_results:
-                file.write("%s\t%4f\n" % (metric, metric_results[metric]))
+            for metric in sorted(metric_results):
+                file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
 
             file.write("##\n## ADDITIONAL INFO:\n")
             file.write("# CELL\tmean_squared_error_on_non_zeros\tmean_euclidean_distance\t"

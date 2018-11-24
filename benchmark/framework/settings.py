@@ -19,6 +19,8 @@ evaluators = [
 # Available data sets
 data_sets = {
     'ERP006670': "utils.data_set.DataSet_ERP006670",
-    '10xPBMC4k': "utils.data_set.DataSet_10xPBMC4k",
-    'GSE60361': "utils.data_set.DataSet_GSE60361"
+    'CELL_CYCLE': "utils.data_set.DataSet_ERP006670",
+    'GSE60361': "utils.data_set.DataSet_GSE60361",
+    'CORTEX_3005': "utils.data_set.DataSet_GSE60361",
+    '10xPBMC4k': "utils.data_set.DataSet_10xPBMC4k"
 }
