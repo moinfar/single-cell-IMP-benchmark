@@ -44,8 +44,8 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
     @staticmethod
     def get_hvg_genes(data, hvg_frac):
-        gene_means = np.log(data.mean(axis=1))
-        gene_vars = 2 * np.log(data.std(axis=1))
+        gene_means = np.log(data.mean(axis=1) + 1e-8)
+        gene_vars = 2 * np.log(data.std(axis=1) + 1e-8)
 
         hvg_indices = set()
 
@@ -95,10 +95,11 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         # Elimination
         low_quality_data = data * (1 - mask.values)
-
-        mask = mask[np.sum(low_quality_data, axis=1) > 0].copy()
-        data = data[np.sum(low_quality_data, axis=1) > 0].copy()
-        low_quality_data = low_quality_data[np.sum(low_quality_data, axis=1) > 0].copy()
+        
+        is_nonzero = np.sum(low_quality_data, axis=1) > 0
+        mask = mask[is_nonzero].copy()
+        data = data[is_nonzero].copy()
+        low_quality_data = low_quality_data[is_nonzero].copy()
 
         # Shuffle columns
         low_quality_data, original_columns, column_permutation = \
@@ -107,7 +108,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
         # Save hidden data
         make_sure_dir_exists(settings.STORAGE_DIR)
         hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
-        dump_gzip_pickle([data.to_sparse(), mask.to_sparse(), hvg_indices, original_columns, column_permutation],
+        dump_gzip_pickle([data.to_sparse(), mask.to_sparse(), original_columns, column_permutation],
                          hidden_data_file_path)
         log("Benchmark hidden data saved to `%s`" % hidden_data_file_path)
 
@@ -117,7 +118,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
     def _load_hidden_state(self):
         hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
-        sparse_data, sparse_mask, hvg_indices, original_columns, column_permutation = \
+        sparse_data, sparse_mask, original_columns, column_permutation = \
             load_gzip_pickle(hidden_data_file_path)
         data = sparse_data.to_dense()
         mask = sparse_mask.to_dense()
@@ -125,11 +126,11 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
         del sparse_data
         del sparse_mask
 
-        return data, mask, hvg_indices, original_columns, column_permutation
+        return data, mask, original_columns, column_permutation
 
     def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
         # Load hidden state and data
-        data, mask, hvg_indices, original_columns, column_permutation = self._load_hidden_state()
+        data, mask, original_columns, column_permutation = self._load_hidden_state()
 
         # Load imputed data
         imputed_data = read_table_file(processed_count_file_path)
@@ -159,7 +160,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         masked_locations = []
         mask_values = mask.values
-        for x in hvg_indices:
+        for x in range(mask_values.shape[0]):
             for y in range(mask_values.shape[1]):
                 if mask_values[x, y] == 1:
                     masked_locations.append((x, y))
@@ -172,20 +173,25 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         original_values = np.asarray(original_values)
         predicted_values = np.asarray(predicted_values)
-
-        fig = go.Figure(layout=go.Layout(title='Prediction plot', font=dict(size=12)))
+        
+        max_axis = float(max(original_values.max(), predicted_values.max()))
+        fig = go.Figure(layout=go.Layout(title='Prediction plot (log scale)', font=dict(size=12),
+                        xaxis=go.layout.XAxis(range=[0, transformations["log"](max_axis)]),
+                        yaxis=go.layout.YAxis(range=[0, transformations["log"](max_axis)])))
         fig.add_scatter(x=transformations["log"](original_values),
                         y=transformations["log"](predicted_values),
                         mode='markers', marker=dict(opacity=0.3))
         pio.write_image(fig, "%s_prediction_plot_log_scale.pdf" % result_prefix,
-                        width=800, height=600)
+                        width=800, height=800)
 
-        fig = go.Figure(layout=go.Layout(title='Prediction plot', font=dict(size=12)))
+        fig = go.Figure(layout=go.Layout(title='Prediction plot (sqrt scale)', font=dict(size=12),
+                        xaxis=go.layout.XAxis(range=[0, transformations["sqrt"](max_axis)]), 
+                        yaxis=go.layout.YAxis(range=[0, transformations["sqrt"](max_axis)])))
         fig.add_scatter(x=transformations["sqrt"](original_values),
                         y=transformations["sqrt"](predicted_values),
                         mode='markers', marker=dict(opacity=0.3))
         pio.write_image(fig, "%s_prediction_plot_sqrt_scale.pdf" % result_prefix,
-                        width=800, height=600)
+                        width=800, height=800)
 
         # Save results to a file
         make_sure_dir_exists(os.path.dirname(result_prefix))
