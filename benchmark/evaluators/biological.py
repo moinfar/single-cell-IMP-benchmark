@@ -312,6 +312,9 @@ class ClusteringEvaluator(AbstractEvaluator):
 
         count_matrix, classes = self._load_data()
 
+        # Remove zero rows
+        count_matrix = count_matrix[np.sum(count_matrix, axis=1) > 0].copy()
+
         # Shuffle columns
         count_matrix, original_columns, column_permutation = \
             shuffle_and_rename_columns(count_matrix, disabled=preserve_columns)
