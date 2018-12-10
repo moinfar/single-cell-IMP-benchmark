@@ -2,7 +2,7 @@ import argparse
 
 from main import generate_cell_cycle_test, handle_main_arguments, evaluate_random_mask_test, \
     evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test, \
-    generate_clustering_test, evaluate_clustering_test
+    generate_clustering_test, evaluate_clustering_test, evaluate_paired_data_test, generate_paired_data_test
 from utils.base import log
 
 
@@ -72,8 +72,8 @@ def generate_parser():
 
     parser_generate_down_sample = subparsers_generate.add_parser('down-sample')
     parser_generate_down_sample.set_defaults(function=generate_down_sample_test)
-    parser_generate_down_sample.add_argument('--data-set', '-d', metavar='DATASET-KEY',
-                                             type=str, default='10xPBMC4k-GRCh38',
+    parser_generate_down_sample.add_argument('--data-set', '-d', metavar='DATASET',
+                                             type=str, default='10xPBMC4k',
                                              help='Dataset to be used in this benchmark')
     parser_generate_down_sample.add_argument('--read-ratio', '-r', metavar='RATIO',
                                              type=float, required=True,
@@ -82,6 +82,12 @@ def generate_parser():
                                              type=int, default=0,
                                              help='Number of samples (cells) used from dataset'
                                                   '(Enter 0 to use all samples.)')
+
+    parser_generate_paired_data = subparsers_generate.add_parser('paired-data')
+    parser_generate_paired_data.set_defaults(function=generate_paired_data_test)
+    parser_generate_paired_data.add_argument('--data-set', '-d', metavar='DS',
+                                             type=str, default='SRP041736',
+                                             help='Dataset which has paired data (DS-HQ and DS-LQ must be implemented)')
 
     # Define evaluate commands
     parser_evaluate.set_defaults(default_function=parser_evaluate.print_help)
@@ -112,6 +118,13 @@ def generate_parser():
     parser_evaluate_down_sample = subparsers_evaluate.add_parser('down-sample')
     parser_evaluate_down_sample.set_defaults(function=evaluate_down_sample_test)
     parser_evaluate_down_sample.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
+                                             help='Transformation to be applied before evaluation.')
+
+    parser_evaluate_paired_data = subparsers_evaluate.add_parser('paired-data')
+    parser_evaluate_paired_data.set_defaults(function=evaluate_paired_data_test)
+    parser_evaluate_paired_data.add_argument('--normalization', "-n", choices=['none', 'l1', 'l2'], default='l1',
+                                             help='Normalization to be applied before transformation and evaluation.')
+    parser_evaluate_paired_data.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
                                              help='Transformation to be applied before evaluation.')
 
     return main_parser

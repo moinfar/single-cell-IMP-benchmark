@@ -6,10 +6,10 @@ normalizations = {
     "l2": lambda x: 1e6 * x.divide((x ** 2).sum(axis=0) ** 0.5, axis=1)
 }
 
-transformations = {
+transformations = {  # Zero Should be mapped to zero
     "none": lambda x: x,
-    "log": lambda x: np.log(1 + x),
-    "sqrt": lambda x: np.sqrt(x) + np.sqrt(x + 1)
+    "log": lambda x: np.log2(1 + x),
+    "sqrt": lambda x: np.sqrt(x) + np.sqrt(x + 1) - 1
 }
 
 ployly_symbols = ["square", "star", "diamond", "circle-cross-open", "bowtie-open", "cross-open-dot", "hourglass",

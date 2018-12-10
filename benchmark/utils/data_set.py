@@ -193,7 +193,7 @@ class DataSet_SRP041736(DataSet):
         self.DATA_SET_MD5_SUM = DataSet_SRP041736.DATA_SET_MD5_SUM
 
         self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR,
-                                               "DataSet_SRP041736",
+                                               "SRP041736",
                                                os.path.basename(self.DATA_SET_URL))
 
         self.EXPERIMENT_INFO_FILE_PATH = os.path.join(settings.STATIC_FILES_DIR,

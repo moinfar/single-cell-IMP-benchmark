@@ -312,15 +312,24 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
 
         # Evaluation
         mse_distances = []
+        mae_distances = []
         euclidean_distances = []
         sqeuclidean_distances = []
         cosine_distances = []
         correlation_distances = []
 
+        mse = float(np.sum(np.where(scaled_data.values > 0, 1, 0) * np.square(scaled_data.values - imputed_data.values)) /
+                    np.sum(np.where(scaled_data.values > 0, 1, 0)))
+        mae = float(np.sum(np.where(scaled_data.values > 0, 1, 0) * np.abs(scaled_data.values - imputed_data.values)) /
+                    np.sum(np.where(scaled_data.values > 0, 1, 0)))
+
         for i in range(scaled_data.shape[1]):
             x = scaled_data.values[:, i]
             y = imputed_data.values[:, i]
-            mse_distances.append(float(np.mean(np.where(x != 0, 1, 0) * np.square(x - y))))
+            mse_distances.append(float(np.sum(np.where(x > 0, 1, 0) * np.square(x - y)) /
+                                       np.sum(np.where(x > 0, 1, 0))))
+            mae_distances.append(float(np.sum(np.where(x > 0, 1, 0) * np.abs(x - y)) /
+                                       np.sum(np.where(x > 0, 1, 0))))
             euclidean_distances.append(pdist(np.vstack((x, y)), 'euclidean')[0])
             sqeuclidean_distances.append(pdist(np.vstack((x, y)), 'sqeuclidean')[0])
             cosine_distances.append(pdist(np.vstack((x, y)), 'cosine')[0])
@@ -337,8 +346,6 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
             nonzero_x_indices = np.nonzero(x > 0)[0]
             pearson_corrs.append(pearsonr(x, y)[0])
             spearman_corrs.append(spearmanr(x, y)[0])
-            np.save("x", x[nonzero_x_indices])
-            np.save("y", y[nonzero_x_indices])
             if len(nonzero_x_indices) != 0 and np.std(x[nonzero_x_indices]) > 1e-10:
                 if np.std(y[nonzero_x_indices]) < 1e-10:
                     pearson_corrs_on_nonzeros.append(0)
@@ -348,6 +355,9 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
                     spearman_corrs_on_nonzeros.append(spearmanr(x[nonzero_x_indices], y[nonzero_x_indices])[0])
 
         metric_results = {
+            'all_mean_absolute_error_on_non_zeros': mae,
+            'all_mean_squared_error_on_non_zeros': mse,
+            'cell_mean_absolute_error_on_non_zeros': np.mean(mae_distances),
             'cell_mean_squared_error_on_non_zeros': np.mean(mse_distances),
             'cell_mean_euclidean_distance': np.mean(euclidean_distances),
             'cell_mean_sqeuclidean_distance': np.mean(sqeuclidean_distances),

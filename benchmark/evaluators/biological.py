@@ -475,6 +475,10 @@ class PairedDataEvaluator(AbstractEvaluator):
         count_matrix_lq, original_columns, column_permutation = \
             shuffle_and_rename_columns(count_matrix_lq, disabled=preserve_columns)
 
+        # Remove zero rows
+        count_matrix_hq = count_matrix_hq[np.sum(count_matrix_lq, axis=1) > 0].copy()
+        count_matrix_lq = count_matrix_lq[np.sum(count_matrix_lq, axis=1) > 0].copy()
+
         # Save hidden data
         make_sure_dir_exists(settings.STORAGE_DIR)
         hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
