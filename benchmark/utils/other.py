@@ -2,8 +2,8 @@ import numpy as np
 
 normalizations = {
     "none": lambda x: x,
-    "l1": lambda x: 1e6 * x.divide(x.mean(axis=0), axis=1),
-    "l2": lambda x: 1e6 * x.divide((x ** 2).mean(axis=0) ** 0.5, axis=1)
+    "l1": lambda x: 1e6 * x.divide(x.sum(axis=0), axis=1),
+    "l2": lambda x: 1e6 * x.divide((x ** 2).sum(axis=0) ** 0.5, axis=1)
 }
 
 transformations = {

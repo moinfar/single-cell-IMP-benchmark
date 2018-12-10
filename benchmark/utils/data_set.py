@@ -2,6 +2,7 @@ import abc
 import csv
 import os
 
+import numpy as np
 import pandas as pd
 import six
 from scipy.io import mmread
@@ -181,3 +182,107 @@ class DataSet_GSE60361(DataSet):
             data.index.name = ""
             data.columns.name = ""
             return data
+
+
+class DataSet_SRP041736(DataSet):
+    DATA_SET_URL = "http://duffel.rail.bio/recount/v2/SRP041736/counts_gene.tsv.gz"
+    DATA_SET_MD5_SUM = "535271b8cd81a93eb210254b766ebcbb"
+
+    def __init__(self):
+        self.DATA_SET_URL = DataSet_SRP041736.DATA_SET_URL
+        self.DATA_SET_MD5_SUM = DataSet_SRP041736.DATA_SET_MD5_SUM
+
+        self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR,
+                                               "DataSet_SRP041736",
+                                               os.path.basename(self.DATA_SET_URL))
+
+        self.EXPERIMENT_INFO_FILE_PATH = os.path.join(settings.STATIC_FILES_DIR,
+                                                      "data", "SRP041736_info.txt")
+
+        self.KEYS = ["details", "HQ-details", "LQ-details", "data", "HQ-data", "LQ-data"]
+
+    def _download_data_set(self):
+        make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
+        download_file_if_not_exists(self.DATA_SET_URL,
+                                    self.DATA_SET_FILE_PATH,
+                                    self.DATA_SET_MD5_SUM)
+
+    def prepare(self):
+        self._download_data_set()
+        assert os.path.exists(self.EXPERIMENT_INFO_FILE_PATH)
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        assert key in self.keys()
+
+        info = pd.read_csv(self.EXPERIMENT_INFO_FILE_PATH, engine="python", sep="\t", comment="#")
+        info = info[np.logical_and(info["Experiment"] != "SRX534506", info["Experiment"] != "SRX534553")]
+        info = info.sort_values(by=["Experiment", "MBases"])
+        info.index = info["Run"].values
+        info["class"] = [sample_name.split("_")[0] for sample_name in info["Sample_Name"]]
+        info = info.transpose()
+
+        if key == "details":
+            return info
+
+        if key == "HQ-details":
+            return info.iloc[:, range(1, 692, 2)]
+
+        if key == "LQ-details":
+            return info.iloc[:, range(0, 692, 2)]
+
+        data = pd.read_csv(self.DATA_SET_FILE_PATH, engine="python", sep=None, index_col=-1)
+        data = data.astype("int64")
+        data["pure_gene_id"] = [gene_name.split(".")[0] for gene_name in list(data.index.values)]
+        data = data.groupby(["pure_gene_id"]).sum()
+        data.index.name = "gene_id"
+        data = data[info.loc["Run"].values]
+
+        if key == "data":
+            return data
+
+        if key == "HQ-data":
+            return data.iloc[:, range(1, 692, 2)]
+
+        if key == "LQ-data":
+            return data.iloc[:, range(0, 692, 2)]
+
+
+class DataSet_SRP041736_HQ(DataSet):
+    def __init__(self):
+        self.ds = DataSet_SRP041736()
+        self.KEYS = ["details", "data"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        if key == "details":
+            return self.ds.get("HQ-details")
+
+        if key == "data":
+            return self.ds.get("HQ-data")
+
+
+class DataSet_SRP041736_LQ(DataSet):
+    def __init__(self):
+        self.ds = DataSet_SRP041736()
+        self.KEYS = ["details", "data"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        if key == "details":
+            return self.ds.get("LQ-details")
+
+        if key == "data":
+            return self.ds.get("LQ-data")

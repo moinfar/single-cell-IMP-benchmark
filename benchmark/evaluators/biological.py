@@ -1,10 +1,12 @@
 import os
 
 import colorlover as cl
+import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 import plotly.io as pio
 import umap
+from scipy.spatial.distance import pdist
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA, TruncatedSVD, FastICA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -292,9 +294,16 @@ class ClusteringEvaluator(AbstractEvaluator):
             details = self.data_set.get("details")
             classes = details.loc[["tissue",
                                    "level1class",
-                                   # "level2class",
+                                   "level2class",
                                    ]]
             return count_matrix, classes
+        elif self.data_set_name.startswith("SRP041736") or self.data_set_name.startswith("POLLEN"):
+            count_matrix = self.data_set.get("data")
+            details = self.data_set.get("details")
+            classes = details.loc[["class"]]
+            return count_matrix, classes
+        else:
+            raise NotImplementedError()
 
     def generate_test_bench(self, count_file_path, **kwargs):
         preserve_columns = kwargs['preserve_columns']
@@ -387,9 +396,15 @@ class ClusteringEvaluator(AbstractEvaluator):
                 fig = go.Figure(
                     layout=go.Layout(title='%s plot' % embedding_name, font=dict(size=8)))
 
+                if len(set(class_names)) <= 20:
+                    color_scale = (cl.scales['9']['qual']['Set1'] + cl.scales['12']['qual']['Set3'])
+                else:
+                    color_scale = ['hsl(' + str(h) + ',50%' + ',50%)'
+                                   for h in np.random.permutation(np.linspace(0, 350, len(set(class_names))))]
+
                 for i, class_name in enumerate(list(sorted(set(class_names)))):
                     indices = [j for j, c in enumerate(class_names) if c == class_name]
-                    color = (cl.scales['9']['qual']['Set1'] + cl.scales['12']['qual']['Set3'])[i]
+                    color = color_scale[i]
                     fig.add_scatter(x=emb_2d[indices, 0], y=emb_2d[indices, 1], mode='markers',
                                     marker=dict(color=color, opacity=0.5,
                                                 symbol=[ployly_symbols[c]
@@ -417,6 +432,132 @@ class ClusteringEvaluator(AbstractEvaluator):
                 file.write("%s\t%4f\n" % (metric, metric_results[metric]))
 
             file.write("##\n## ADDITIONAL INFO:\n")
+
+        log("Evaluation results saved to `%s_*`" % result_prefix)
+
+        return metric_results
+
+
+class PairedDataEvaluator(AbstractEvaluator):
+    def __init__(self, uid, data_set_name=None):
+        super(PairedDataEvaluator, self).__init__(uid)
+
+        self.data_set_name = data_set_name
+        self.data_set_hq = None
+        self.data_set_lq = None
+
+    def prepare(self, **kwargs):
+        if self.data_set_name is None:
+            raise ValueError("data_set_name can not be None.")
+
+        self.data_set_hq = get_data_set_class(self.data_set_name + "-HQ")()
+        self.data_set_lq = get_data_set_class(self.data_set_name + "-LQ")()
+        self.data_set_hq.prepare()
+        self.data_set_lq.prepare()
+
+    def _load_lq_data(self):
+        count_matrix = self.data_set_lq.get("data")
+        return count_matrix
+
+    def _load_hq_data(self):
+        count_matrix = self.data_set_hq.get("data")
+        return count_matrix
+
+    def generate_test_bench(self, count_file_path, **kwargs):
+        preserve_columns = kwargs['preserve_columns']
+
+        count_file_path = os.path.abspath(count_file_path)
+
+        count_matrix_lq = self._load_lq_data()
+        count_matrix_hq = self._load_hq_data()
+
+        # Shuffle columns
+        count_matrix_lq, original_columns, column_permutation = \
+            shuffle_and_rename_columns(count_matrix_lq, disabled=preserve_columns)
+
+        # Save hidden data
+        make_sure_dir_exists(settings.STORAGE_DIR)
+        hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
+        dump_gzip_pickle([count_matrix_lq.to_sparse(), original_columns, column_permutation,
+                          count_matrix_hq.to_sparse()],
+                         hidden_data_file_path)
+        log("Benchmark hidden data saved to `%s`" % hidden_data_file_path)
+
+        make_sure_dir_exists(os.path.dirname(count_file_path))
+        write_csv(count_matrix_lq, count_file_path)
+        log("Count file saved to `%s`" % count_file_path)
+
+    def _load_hidden_state(self):
+        hidden_data_file_path = os.path.join(settings.STORAGE_DIR, "%s.hidden.pkl.gz" % self.uid)
+        sparse_count_matrix_lq, original_columns, column_permutation, sparse_count_matrix_hq = \
+            load_gzip_pickle(hidden_data_file_path)
+
+        count_matrix_lq = sparse_count_matrix_lq.to_dense()
+        count_matrix_hq = sparse_count_matrix_hq.to_dense()
+
+        del sparse_count_matrix_lq
+        del sparse_count_matrix_hq
+
+        return count_matrix_lq, original_columns, column_permutation, count_matrix_hq
+
+    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+        normalization = kwargs['normalization']
+        transformation = kwargs['transformation']
+
+        # Load hidden state and data
+        _, original_columns, column_permutation, count_matrix_hq = self._load_hidden_state()
+
+        # Load imputed data
+        imputed_data = read_table_file(processed_count_file_path)
+
+        # Restore column names and order
+        imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
+
+        # Data transformations
+        imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
+        count_matrix_hq = transformations[transformation](normalizations[normalization](count_matrix_hq))
+
+        # Evaluation
+        mse_distances = []
+        euclidean_distances = []
+        sqeuclidean_distances = []
+        cosine_distances = []
+        correlation_distances = []
+
+        for i in range(count_matrix_hq.shape[1]):
+            x = count_matrix_hq.values[:, i]
+            y = imputed_data.values[:, i]
+            mse_distances.append(float(np.mean(np.where(x != 0, 1, 0) * np.square(x - y))))
+            euclidean_distances.append(pdist(np.vstack((x, y)), 'euclidean')[0])
+            sqeuclidean_distances.append(pdist(np.vstack((x, y)), 'sqeuclidean')[0])
+            cosine_distances.append(pdist(np.vstack((x, y)), 'cosine')[0])
+            correlation_distances.append(pdist(np.vstack((x, y)), 'correlation')[0])
+
+        metric_results = {
+            'cell_mean_squared_error_on_non_zeros': np.mean(mse_distances),
+            'cell_mean_euclidean_distance': np.mean(euclidean_distances),
+            'cell_mean_sqeuclidean_distance': np.mean(sqeuclidean_distances),
+            'cell_mean_cosine_distance': np.mean(cosine_distances),
+            'cell_mean_correlation_distance': np.mean(correlation_distances)
+        }
+
+        # Save results to a file
+        make_sure_dir_exists(os.path.dirname(result_prefix))
+        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+            file.write("## METRICS:\n")
+            for metric in sorted(metric_results):
+                file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
+
+            file.write("##\n## ADDITIONAL INFO:\n")
+            file.write("# CELL\tmean_squared_error_on_non_zeros\tmean_euclidean_distance\t"
+                       "mean_sqeuclidean_distance\tmean_cosine_distance\tmean_correlation_distance:\n")
+            for i in range(count_matrix_hq.shape[1]):
+                file.write("# %s\t%f\t%f\t%f\t%f\t%f\n" % (count_matrix_hq.columns.values[i],
+                                                           mse_distances[i],
+                                                           euclidean_distances[i],
+                                                           sqeuclidean_distances[i],
+                                                           cosine_distances[i],
+                                                           correlation_distances[i]))
 
         log("Evaluation results saved to `%s_*`" % result_prefix)
 
