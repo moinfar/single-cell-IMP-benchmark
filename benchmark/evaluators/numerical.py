@@ -8,11 +8,11 @@ from scipy.spatial.distance import pdist
 from scipy.stats import pearsonr, spearmanr
 
 from evaluators.base import AbstractEvaluator
-from framework import settings
+from general import settings
 from utils.base import make_sure_dir_exists, log, dump_gzip_pickle, load_gzip_pickle
-from utils.data_set import get_data_set_class
-from utils.data_table import shuffle_and_rename_columns, rearrange_and_rename_columns, write_csv, read_table_file
-from utils.other import transformations
+from data.data_set import get_data_set_class
+from data.io import write_csv, read_table_file
+from data.operations import shuffle_and_rename_columns, rearrange_and_rename_columns, transformations
 
 
 class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):

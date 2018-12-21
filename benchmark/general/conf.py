@@ -9,7 +9,7 @@ def load_settings():
     A function which loads settings from settings.py.
     :return:
     """
-    settings_path = "framework.settings"
+    settings_path = "general.settings"
     try:
         loaded_settings = importlib.import_module(settings_path)
         # sys.stderr.write("Settings loaded successfully. \n")

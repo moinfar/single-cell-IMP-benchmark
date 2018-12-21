@@ -6,7 +6,7 @@ import sys
 
 from colorama import Fore
 
-from framework.conf import settings
+from general.conf import settings
 
 
 def log(message):

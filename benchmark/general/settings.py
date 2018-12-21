@@ -11,12 +11,6 @@ STATIC_FILES_DIR = os.path.join(os.path.join(BASE_DIR, "static"))
 CACHE_DIR = os.path.join(os.path.join(FILES_DIR, "cache"))
 STORAGE_DIR = os.path.join(os.path.join(FILES_DIR, "storage"))
 
-# Available evaluators
-evaluators = [
-    'evaluators.biological.CellCyclePreservationEvaluator',
-    'evaluators.numerical.GridMaskedDataPredictionEvaluator',
-]
-
 # Available data sets
 data_sets = {
     'ERP006670': "utils.data_set.DataSet_ERP006670",

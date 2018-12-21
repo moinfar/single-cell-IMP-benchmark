@@ -7,9 +7,9 @@ import pandas as pd
 import six
 from scipy.io import mmread
 
-from framework.conf import settings
+from general.conf import settings
 from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file, load_class, log
-from utils.data_table import read_csv
+from data.io import read_csv
 
 
 def get_data_set_class(dataset_id):

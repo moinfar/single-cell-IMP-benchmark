@@ -1,4 +1,5 @@
 import argparse
+from general.conf import settings
 
 from main import generate_cell_cycle_test, handle_main_arguments, evaluate_random_mask_test, \
     evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test, \
@@ -146,7 +147,8 @@ if __name__ == '__main__':
     parser = generate_parser()
     args = parser.parse_args()
 
-    log(str(args))
+    if settings.DEBUG:
+        log(str(args))
 
     handle_main_arguments(args)
 

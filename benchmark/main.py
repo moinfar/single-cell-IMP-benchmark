@@ -1,7 +1,8 @@
-from evaluators.biological import CellCyclePreservationEvaluator, ClusteringEvaluator, PairedDataEvaluator, \
-    CITESeqEvaluator
+from evaluators.biological import CellCyclePreservationEvaluator
+from evaluators.paired_data import PairedLQHQDataEvaluator, CITESeqEvaluator
+from evaluators.clustering import ClusteringEvaluator
 from evaluators.numerical import RandomMaskedLocationPredictionEvaluator, DownSampledDataReconstructionEvaluator
-from framework.conf import settings
+from general.conf import settings
 from utils.base import generate_seed
 
 
@@ -53,7 +54,7 @@ def generate_down_sample_test(args):
 
 def generate_paired_data_test(args):
     uid = "%s_paired_data" % args.id
-    evaluator = PairedDataEvaluator(uid, args.data_set)
+    evaluator = PairedLQHQDataEvaluator(uid, args.data_set)
     evaluator.prepare()
     evaluator.set_seed(args.seed)
     evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns)
@@ -104,7 +105,7 @@ def evaluate_down_sample_test(args):
 
 def evaluate_paired_data_test(args):
     uid = "%s_paired_data" % args.id
-    evaluator = PairedDataEvaluator(uid)
+    evaluator = PairedLQHQDataEvaluator(uid)
     evaluator.set_seed(args.seed)
     results = evaluator.evaluate_result(args.input, args.result_prefix,
                                         normalization=args.normalization, transformation=args.transformation)
