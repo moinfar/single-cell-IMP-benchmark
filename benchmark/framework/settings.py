@@ -29,5 +29,10 @@ data_sets = {
     'POLLEN-HQ': "utils.data_set.DataSet_SRP041736_HQ",
     'SRP041736-LQ': "utils.data_set.DataSet_SRP041736_LQ",
     'POLLEN-LQ': "utils.data_set.DataSet_SRP041736_LQ",
+    'GSE100866': "utils.data_set.DataSet_GSE100866",
+    'CITE_Seq': "utils.data_set.DataSet_GSE100866",
+    'CITE-CBMC': "utils.data_set.DataSet_GSE100866_CBMC",
+    'CITE-PBMC': "utils.data_set.DataSet_GSE100866_PBMC",
+    'CITE-CD8': "utils.data_set.DataSet_GSE100866_CD8",
     '10xPBMC4k': "utils.data_set.DataSet_10xPBMC4k"
 }

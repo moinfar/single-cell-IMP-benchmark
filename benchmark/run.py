@@ -2,7 +2,8 @@ import argparse
 
 from main import generate_cell_cycle_test, handle_main_arguments, evaluate_random_mask_test, \
     evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test, \
-    generate_clustering_test, evaluate_clustering_test, evaluate_paired_data_test, generate_paired_data_test
+    generate_clustering_test, evaluate_clustering_test, evaluate_paired_data_test, generate_paired_data_test, \
+    evaluate_cite_seq_test, generate_cite_seq_test
 from utils.base import log
 
 
@@ -89,6 +90,12 @@ def generate_parser():
                                              type=str, default='SRP041736',
                                              help='Dataset which has paired data (DS-HQ and DS-LQ must be implemented)')
 
+    parser_generate_cite_seq = subparsers_generate.add_parser('cite-seq')
+    parser_generate_cite_seq.set_defaults(function=generate_cite_seq_test)
+    parser_generate_cite_seq.add_argument('--data-set', '-d', metavar='DS',
+                                          type=str, default='CITE_CBMC',
+                                          help='Dataset which has RNA and ADT data (must have RNA and ADT keys)')
+
     # Define evaluate commands
     parser_evaluate.set_defaults(default_function=parser_evaluate.print_help)
     parser_evaluate.add_argument('--input', '-i', metavar='IMPUTED_COUNT_FILE',
@@ -126,6 +133,11 @@ def generate_parser():
                                              help='Normalization to be applied before transformation and evaluation.')
     parser_evaluate_paired_data.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
                                              help='Transformation to be applied before evaluation.')
+
+    parser_evaluate_cite_seq = subparsers_evaluate.add_parser('cite-seq')
+    parser_evaluate_cite_seq.set_defaults(function=evaluate_cite_seq_test)
+    parser_evaluate_cite_seq.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
+                                          help='Transformation to be applied before evaluation.')
 
     return main_parser
 

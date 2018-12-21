@@ -8,7 +8,7 @@ import six
 from scipy.io import mmread
 
 from framework.conf import settings
-from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file, load_class
+from utils.base import make_sure_dir_exists, download_file_if_not_exists, extract_compressed_file, load_class, log
 from utils.data_table import read_csv
 
 
@@ -286,3 +286,197 @@ class DataSet_SRP041736_LQ(DataSet):
 
         if key == "data":
             return self.ds.get("LQ-data")
+
+
+class DataSet_GSE100866(DataSet):
+    PBMC_RNA_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                        "GSE100866_PBMC_vs_flow_10X-RNA_umi.csv.gz"
+    PBMC_RNA_DATA_MD5_SUM = "5ce36806a4b17fc8385ae612eef4f8e8"
+    PBMC_ADT_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                        "GSE100866_PBMC_vs_flow_10X-ADT_umi.csv.gz"
+    PBMC_ADT_DATA_MD5_SUM = "515146739962eaa7e114b5838cfeeecf"
+    PBMC_TRANSFORMED_ADT_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                                    "GSE100866_PBMC_vs_flow_10X-ADT_clr-transformed.csv.gz"
+    PBMC_TRANSFORMED_ADT_DATA_MD5_SUM = "b371af3d9e06a0a33e7bc52941220343"
+    CBMC_RNA_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                        "GSE100866_CBMC_8K_13AB_10X-RNA_umi.csv.gz"
+    CBMC_RNA_DATA_MD5_SUM = "b8d8332e5b56f689427d8c0580b0fc38"
+    CBMC_ADT_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                        "GSE100866_CBMC_8K_13AB_10X-ADT_umi.csv.gz"
+    CBMC_ADT_DATA_MD5_SUM = "d90fed7d120317281e63826931a0e070"
+    CBMC_TRANSFORMED_ADT_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                                    "GSE100866_CBMC_8K_13AB_10X-ADT_clr-transformed.csv.gz"
+    CBMC_TRANSFORMED_ADT_DATA_MD5_SUM = "5e53cab00dd0b073028098d52e51e565"
+    CD8_RNA_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                       "GSE100866_CD8_merged-RNA_umi.csv.gz"
+    CD8_RNA_DATA_MD5_SUM = "bb055e35f989a19f6d0f3fbc803e65d7"
+    CD8_ADT_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                       "GSE100866_CD8_merged-ADT_umi.csv.gz"
+    CD8_ADT_DATA_MD5_SUM = "81f47f6a8fdede82ed338199df2c792b"
+    CD8_TRANSFORMED_ADT_DATA_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100866/suppl/" \
+                                   "GSE100866_CD8_merged-ADT_clr-transformed.csv.gz"
+    CD8_TRANSFORMED_ADT_DATA_MD5_SUM = "a9c084f4c13760fc364087e76cfee16e"
+
+    def __init__(self):
+
+        self.DATA_SET_DIR_NAME = os.path.join(settings.CACHE_DIR, "GSE100866")
+
+        self.PBMC_RNA_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME, self.PBMC_RNA_DATA_URL.split("/")[-1])
+        self.PBMC_ADT_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME, self.PBMC_ADT_DATA_URL.split("/")[-1])
+        self.PBMC_TRANSFORMED_ADT_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME,
+                                                                self.PBMC_TRANSFORMED_ADT_DATA_URL.split("/")[-1])
+        self.CBMC_RNA_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME, self.CBMC_RNA_DATA_URL.split("/")[-1])
+        self.CBMC_ADT_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME, self.CBMC_ADT_DATA_URL.split("/")[-1])
+        self.CBMC_TRANSFORMED_ADT_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME,
+                                                                self.CBMC_TRANSFORMED_ADT_DATA_URL.split("/")[-1])
+        self.CD8_RNA_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME, self.CD8_RNA_DATA_URL.split("/")[-1])
+        self.CD8_ADT_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME, self.CD8_ADT_DATA_URL.split("/")[-1])
+        self.CD8_TRANSFORMED_ADT_DATA_FILE_PATH = os.path.join(self.DATA_SET_DIR_NAME,
+                                                               self.CD8_TRANSFORMED_ADT_DATA_URL.split("/")[-1])
+
+        self.KEYS = ["PBMC-RNA", "CBMC-RNA", "CD8-RNA",
+                     "PBMC-ADT", "CBMC-ADT", "CD8-ADT",
+                     "PBMC-ADT-clr", "CBMC-ADT-clr", "CD8-ADT-clr"]
+
+    def _download_data_set(self):
+        make_sure_dir_exists(self.DATA_SET_DIR_NAME)
+        download_file_if_not_exists(self.PBMC_RNA_DATA_URL, self.PBMC_RNA_DATA_FILE_PATH, self.PBMC_RNA_DATA_MD5_SUM)
+        download_file_if_not_exists(self.PBMC_ADT_DATA_URL, self.PBMC_ADT_DATA_FILE_PATH, self.PBMC_ADT_DATA_MD5_SUM)
+        download_file_if_not_exists(self.PBMC_TRANSFORMED_ADT_DATA_URL, self.PBMC_TRANSFORMED_ADT_DATA_FILE_PATH,
+                                    self.PBMC_TRANSFORMED_ADT_DATA_MD5_SUM)
+        download_file_if_not_exists(self.CBMC_RNA_DATA_URL, self.CBMC_RNA_DATA_FILE_PATH, self.CBMC_RNA_DATA_MD5_SUM)
+        download_file_if_not_exists(self.CBMC_ADT_DATA_URL, self.CBMC_ADT_DATA_FILE_PATH, self.CBMC_ADT_DATA_MD5_SUM)
+        download_file_if_not_exists(self.CBMC_TRANSFORMED_ADT_DATA_URL, self.CBMC_TRANSFORMED_ADT_DATA_FILE_PATH,
+                                    self.CBMC_TRANSFORMED_ADT_DATA_MD5_SUM)
+        download_file_if_not_exists(self.CD8_RNA_DATA_URL, self.CD8_RNA_DATA_FILE_PATH, self.CD8_RNA_DATA_MD5_SUM)
+        download_file_if_not_exists(self.CD8_ADT_DATA_URL, self.CD8_ADT_DATA_FILE_PATH, self.CD8_ADT_DATA_MD5_SUM)
+        download_file_if_not_exists(self.CD8_TRANSFORMED_ADT_DATA_URL, self.CD8_TRANSFORMED_ADT_DATA_FILE_PATH,
+                                    self.CD8_TRANSFORMED_ADT_DATA_MD5_SUM)
+
+    def _extract_PBMC_human_cells(self):
+        human_cells_file_path = os.path.join(self.DATA_SET_DIR_NAME, "PBMC-human-cells.csv")
+
+        if os.path.exists(human_cells_file_path):
+            log("PBMC human cells are already extracted.")
+            return
+
+        data = pd.read_csv(self.PBMC_RNA_DATA_FILE_PATH, index_col=0)
+
+        human_section = data.loc[[gene for gene in data.index.values if gene.startswith("HUMAN")]]
+        mouse_section = data.loc[[gene for gene in data.index.values if gene.startswith("MOUSE")]]
+
+        pd.DataFrame(data.columns.values[human_section.sum(axis=0) > 20 * mouse_section.sum(axis=0)],
+                     columns=["human"]).to_csv(human_cells_file_path, index=None)
+
+        log("PBMC human cells extracted.")
+
+    def _extract_CBMC_human_cells(self):
+        human_cells_file_path = os.path.join(self.DATA_SET_DIR_NAME, "CBMC-human-cells.csv")
+
+        if os.path.exists(human_cells_file_path):
+            log("CBMC human cells are already extracted.")
+            return
+
+        data = pd.read_csv(self.CBMC_RNA_DATA_FILE_PATH, index_col=0)
+
+        human_section = data.loc[[gene for gene in data.index.values if gene.startswith("HUMAN")]]
+        mouse_section = data.loc[[gene for gene in data.index.values if gene.startswith("MOUSE")]]
+
+        # 20x is enough (See Supplementary Figure 2 of Cite-Seq paper.)
+        pd.DataFrame(data.columns.values[human_section.sum(axis=0) > 20 * mouse_section.sum(axis=0)],
+                     columns=["human"]).to_csv(human_cells_file_path , index=None)
+
+        log("CBMC human cells extracted.")
+
+    def prepare(self):
+        self._download_data_set()
+        self._extract_CBMC_human_cells()
+        self._extract_PBMC_human_cells()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        assert key in self.keys()
+
+        key_to_filename_mapping = {
+            "PBMC-RNA": self.PBMC_RNA_DATA_FILE_PATH,
+            "CBMC-RNA": self.CBMC_RNA_DATA_FILE_PATH,
+            "CD8-RNA": self.CD8_RNA_DATA_FILE_PATH,
+            "PBMC-ADT": self.PBMC_ADT_DATA_FILE_PATH,
+            "CBMC-ADT": self.CBMC_ADT_DATA_FILE_PATH,
+            "CD8-ADT": self.CD8_ADT_DATA_FILE_PATH,
+            "PBMC-ADT-clr": self.PBMC_TRANSFORMED_ADT_DATA_URL,
+            "CBMC-ADT-clr": self.CBMC_TRANSFORMED_ADT_DATA_URL,
+            "CD8-ADT-clr": self.CD8_TRANSFORMED_ADT_DATA_URL
+        }
+
+        data = pd.read_csv(key_to_filename_mapping[key], index_col=0)
+
+        experiment = key.split("-")[0]
+
+        if experiment == "CBMC":
+            human_cells_file_path = os.path.join(self.DATA_SET_DIR_NAME, "CBMC-human-cells.csv")
+            human_cells = pd.read_csv(human_cells_file_path)["human"]
+            data = data[human_cells]
+            if key.endswith("RNA"):
+                human_genes = [gene for gene in data.index.values if gene.startswith("HUMAN")]
+                data = data.loc[human_genes]
+                data.index = [gene.split("_", maxsplit=1)[1] for gene in data.index.values]
+            return data
+        elif experiment == "PBMC":
+            human_cells_file_path = os.path.join(self.DATA_SET_DIR_NAME, "PBMC-human-cells.csv")
+            human_cells = pd.read_csv(human_cells_file_path)["human"]
+            data = data[human_cells]
+            if key.endswith("RNA"):
+                human_genes = [gene for gene in data.index.values if gene.startswith("HUMAN")]
+                data = data.loc[human_genes]
+                data.index = [gene.split("_", maxsplit=1)[1] for gene in data.index.values]
+            return data
+        elif experiment == "CD8":
+            return data
+
+
+class DataSet_GSE100866_CBMC(DataSet):
+    def __init__(self):
+        self.ds = DataSet_GSE100866()
+        self.KEYS = ["RNA", "ADT", "ADT-clr"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        return self.ds.get("CBMC-%s" % key)
+
+
+class DataSet_GSE100866_PBMC(DataSet):
+    def __init__(self):
+        self.ds = DataSet_GSE100866()
+        self.KEYS = ["RNA", "ADT", "ADT-clr"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        return self.ds.get("PBMC-%s" % key)
+
+
+class DataSet_GSE100866_CD8(DataSet):
+    def __init__(self):
+        self.ds = DataSet_GSE100866()
+        self.KEYS = ["RNA", "ADT", "ADT-clr"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        return self.ds.get("CD8-%s" % key)
