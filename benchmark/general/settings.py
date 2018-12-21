@@ -28,5 +28,11 @@ data_sets = {
     'CITE-CBMC': "utils.data_set.DataSet_GSE100866_CBMC",
     'CITE-PBMC': "utils.data_set.DataSet_GSE100866_PBMC",
     'CITE-CD8': "utils.data_set.DataSet_GSE100866_CD8",
+    'GSE84133': "utils.data_set.DataSet_GSE84133",
+    'BARON': "utils.data_set.DataSet_GSE84133",
+    'GSE84133-HUMAN': "utils.data_set.DataSet_GSE84133_Human",
+    'BARON-HUMAN': "utils.data_set.DataSet_GSE84133_Human",
+    'GSE84133-MOUSE': "utils.data_set.DataSet_GSE84133_Mouse",
+    'BARON-MOUSE': "utils.data_set.DataSet_GSE84133_Mouse",
     '10xPBMC4k': "utils.data_set.DataSet_10xPBMC4k"
 }

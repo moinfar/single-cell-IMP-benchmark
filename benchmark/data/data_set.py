@@ -31,6 +31,10 @@ class DataSet:
     def get(self, key):
         pass
 
+    @abc.abstractmethod
+    def info(self):
+        pass
+
 
 class DataSet_ERP006670(DataSet):
     DATA_SET_URL = "https://www.ebi.ac.uk/arrayexpress/files/E-MTAB-2805/E-MTAB-2805.processed.1.zip"
@@ -77,6 +81,15 @@ class DataSet_ERP006670(DataSet):
 
         data = pd.read_csv(key_to_data_path_mapping[key], sep="\t")
         return data
+
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/nbt.3102",
+            url=self.DATA_SET_URL,
+            umi=False,
+            isolation="FACS",
+            technology="Fluidigm C1"
+        )
 
 
 class DataSet_10xPBMC4k(DataSet):
@@ -133,6 +146,15 @@ class DataSet_10xPBMC4k(DataSet):
 
         return data
 
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/ncomms14049",
+            url=self.DATA_SET_URL,
+            umi=True,
+            isolation="droplet-based",
+            technology="10x"
+        )
+
 
 class DataSet_GSE60361(DataSet):
     # DATA_SET_URL = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE60nnn/" \
@@ -182,6 +204,15 @@ class DataSet_GSE60361(DataSet):
             data.index.name = ""
             data.columns.name = ""
             return data
+
+    def info(self):
+        return dict(
+            publication_link="http://science.sciencemag.org/content/early/2015/02/18/science.aaa1934",
+            url=self.DATA_SET_URL,
+            umi=True,
+            isolation="FACS",
+            technology="Fluidigm C1"
+        )
 
 
 class DataSet_SRP041736(DataSet):
@@ -249,6 +280,15 @@ class DataSet_SRP041736(DataSet):
         if key == "LQ-data":
             return data.iloc[:, range(0, 692, 2)]
 
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/nbt.2967",
+            url=self.DATA_SET_URL,
+            umi=False,
+            isolation="FACS",
+            technology="Fluidigm C1"
+        )
+
 
 class DataSet_SRP041736_HQ(DataSet):
     def __init__(self):
@@ -268,6 +308,9 @@ class DataSet_SRP041736_HQ(DataSet):
         if key == "data":
             return self.ds.get("HQ-data")
 
+    def info(self):
+        return self.ds.info()
+
 
 class DataSet_SRP041736_LQ(DataSet):
     def __init__(self):
@@ -286,6 +329,9 @@ class DataSet_SRP041736_LQ(DataSet):
 
         if key == "data":
             return self.ds.get("LQ-data")
+
+    def info(self):
+        return self.ds.info()
 
 
 class DataSet_GSE100866(DataSet):
@@ -436,6 +482,15 @@ class DataSet_GSE100866(DataSet):
         elif experiment == "CD8":
             return data
 
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/nmeth.4380",
+            url="https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE100866",
+            umi=True,
+            isolation="droplet-based",
+            technology="mixed"
+        )
+
 
 class DataSet_GSE100866_CBMC(DataSet):
     def __init__(self):
@@ -450,6 +505,15 @@ class DataSet_GSE100866_CBMC(DataSet):
 
     def get(self, key):
         return self.ds.get("CBMC-%s" % key)
+
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/nmeth.4380",
+            url="https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE100866",
+            umi=True,
+            isolation="droplet-based",
+            technology="10x"
+        )
 
 
 class DataSet_GSE100866_PBMC(DataSet):
@@ -466,6 +530,15 @@ class DataSet_GSE100866_PBMC(DataSet):
     def get(self, key):
         return self.ds.get("PBMC-%s" % key)
 
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/nmeth.4380",
+            url="https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE100866",
+            umi=True,
+            isolation="droplet-based",
+            technology="Drop-seq"
+        )
+
 
 class DataSet_GSE100866_CD8(DataSet):
     def __init__(self):
@@ -480,3 +553,152 @@ class DataSet_GSE100866_CD8(DataSet):
 
     def get(self, key):
         return self.ds.get("CD8-%s" % key)
+
+    def info(self):
+        return dict(
+            publication_link="https://www.nature.com/articles/nmeth.4380",
+            url="https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE100866",
+            umi=True,
+            isolation="droplet-based",
+            technology="Drop-seq"
+        )
+
+
+class DataSet_GSE84133(DataSet):
+    DATA_SET_URL = "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE84133&format=file"
+    DATA_SET_MD5_SUM = "e9171075e0c45ab1aa1c2f7374e006d3"
+
+    def __init__(self):
+        self.DATA_SET_URL = self.DATA_SET_URL
+        self.DATA_SET_MD5_SUM = self.DATA_SET_MD5_SUM
+
+        self.DATA_SET_FILE_PATH = os.path.join(settings.CACHE_DIR, "GSE84133", "GSE84133_RAW.tar")
+        self.DATA_SET_DIR = "%s.d" % self.DATA_SET_FILE_PATH
+
+        self.human1_DATA_PATH = os.path.join(self.DATA_SET_DIR, "GSM2230757_human1_umifm_counts.csv.gz")
+        self.human2_DATA_PATH = os.path.join(self.DATA_SET_DIR, "GSM2230758_human2_umifm_counts.csv.gz")
+        self.human3_DATA_PATH = os.path.join(self.DATA_SET_DIR, "GSM2230759_human3_umifm_counts.csv.gz")
+        self.human4_DATA_PATH = os.path.join(self.DATA_SET_DIR, "GSM2230760_human4_umifm_counts.csv.gz")
+        self.mouse1_DATA_PATH = os.path.join(self.DATA_SET_DIR, "GSM2230761_mouse1_umifm_counts.csv.gz")
+        self.mouse2_DATA_PATH = os.path.join(self.DATA_SET_DIR, "GSM2230762_mouse2_umifm_counts.csv.gz")
+
+        self.KEYS = ["human1", "human2", "human3", "human4",
+                     "mouse1", "mouse2",
+                     "human1-details", "human2-details", "human3-details", "human4-details",
+                     "mouse1-details", "mouse2-details"]
+
+    def _download_data_set(self):
+        make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
+        download_file_if_not_exists(self.DATA_SET_URL,
+                                    self.DATA_SET_FILE_PATH,
+                                    self.DATA_SET_MD5_SUM)
+
+    def _extract_data_set(self):
+        extract_compressed_file(self.DATA_SET_FILE_PATH, self.DATA_SET_DIR)
+
+    def prepare(self):
+        self._download_data_set()
+        self._extract_data_set()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        assert key in self.keys()
+
+        key_to_file_mapping = {
+            "human1": self.human1_DATA_PATH,
+            "human2": self.human2_DATA_PATH,
+            "human3": self.human3_DATA_PATH,
+            "human4": self.human4_DATA_PATH,
+            "mouse1": self.mouse1_DATA_PATH,
+            "mouse2": self.mouse2_DATA_PATH
+        }
+
+        data = read_csv(key_to_file_mapping[key.split("-")[0]])
+        data = data.transpose()
+
+        if key.endswith("-details"):
+            data = data.loc[["barcode", "assigned_cluster"]]
+        else:
+            data = data.drop(index=["barcode", "assigned_cluster"])
+            data = data.astype("int64")
+
+        return data
+
+    def info(self):
+        return dict(
+            publication_link="https://www.sciencedirect.com/science/article/pii/S2405471216302666?via%3Dihub",
+            url=self.DATA_SET_URL,
+            umi=False,
+            isolation="droplet-based",
+            technology="inDrop"
+        )
+
+
+class DataSet_GSE84133_Human(DataSet):
+    def __init__(self):
+        self.ds = DataSet_GSE84133()
+        self.KEYS = ["data", "details"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        if key == "data":
+            human1 = self.ds.get("human1")
+            human2 = self.ds.get("human2")
+            human3 = self.ds.get("human3")
+            human4 = self.ds.get("human4")
+
+            assert np.all(human1.index.values==human2.index.values) and \
+                   np.all(human1.index.values==human2.index.values) and \
+                   np.all(human1.index.values==human3.index.values)
+
+            return pd.concat([human1, human2, human3, human4], axis=1)
+        elif key == "details":
+            human1 = self.ds.get("human1-details")
+            human2 = self.ds.get("human2-details")
+            human3 = self.ds.get("human3-details")
+            human4 = self.ds.get("human4-details")
+
+            return pd.concat([human1, human2, human3, human4], axis=1)
+        else:
+            raise NotImplementedError()
+
+    def info(self):
+        return self.ds.info()
+
+
+class DataSet_GSE84133_Mouse(DataSet):
+    def __init__(self):
+        self.ds = DataSet_GSE84133()
+        self.KEYS = ["data", "details"]
+
+    def prepare(self):
+        self.ds.prepare()
+
+    def keys(self):
+        return self.KEYS
+
+    def get(self, key):
+        if key == "data":
+            mouse1 = self.ds.get("mouse1")
+            mouse2  = self.ds.get("mouse2")
+
+            assert np.all(mouse1.index.values == mouse2.index.values)
+
+            return pd.concat([mouse1, mouse2], axis=1)
+        elif key == "details":
+            mouse1 = self.ds.get("mouse1-details")
+            mouse2 = self.ds.get("mouse2-details")
+
+            return pd.concat([mouse1, mouse2], axis=1)
+        else:
+            raise NotImplementedError()
+
+    def info(self):
+        return self.ds.info()

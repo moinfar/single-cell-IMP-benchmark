@@ -67,6 +67,12 @@ def _extract_compressed_file(source, destination):
             tar_file.extractall(path=destination)
             log("Extracted `%s` to \n"
                 "          `%s`" % (source, destination))
+    elif source.endswith(".tar"):
+        import tarfile
+        with tarfile.open(source, "r") as tar_file:
+            tar_file.extractall(path=destination)
+            log("Extracted `%s` to \n"
+                "          `%s`" % (source, destination))
     else:
         raise NotImplementedError
 
