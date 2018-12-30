@@ -1,22 +1,23 @@
 import os
 
+import numpy as np
 import pandas as pd
-import plotly.graph_objs as go
-import plotly.io as pio
 import umap
+from sklearn import svm
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA, TruncatedSVD, FastICA
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.manifold import TSNE
-from sklearn.metrics import calinski_harabaz_score, silhouette_score
+from sklearn.metrics import calinski_harabaz_score, silhouette_score, accuracy_score
 from sklearn.metrics.cluster import adjusted_mutual_info_score, completeness_score
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
 
-from evaluators.base import AbstractEvaluator
-from general.conf import settings
-from utils.base import make_sure_dir_exists, log, dump_gzip_pickle, load_gzip_pickle
 from data.data_set import get_data_set_class
 from data.io import read_table_file, write_csv
 from data.operations import shuffle_and_rename_columns, rearrange_and_rename_columns, normalizations, transformations
+from evaluators.base import AbstractEvaluator
+from general.conf import settings
+from utils.base import make_sure_dir_exists, log, dump_gzip_pickle, load_gzip_pickle
 
 
 class CellCyclePreservationEvaluator(AbstractEvaluator):
@@ -113,13 +114,8 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
         return data, imputed_data
 
-    def evaluate_result(self, processed_count_file, result_prefix, **kwargs):
-        normalization = kwargs['normalization']
-        transformation = kwargs['transformation']
-
-        data, imputed_data = self._load_data_and_imputed_data_for_evaluation(processed_count_file)
-        gold_standard_classes = [column_name.split("_")[0] for column_name in data.columns.values]
-
+    @staticmethod
+    def _get_related_part(data):
         G1_S_related_genes = ["ENSMUSG00000000028", "ENSMUSG00000001228", "ENSMUSG00000002870", "ENSMUSG00000004642",
                               "ENSMUSG00000005410", "ENSMUSG00000006678", "ENSMUSG00000006715", "ENSMUSG00000017499",
                               "ENSMUSG00000020649", "ENSMUSG00000022360", "ENSMUSG00000022422", "ENSMUSG00000022673",
@@ -146,39 +142,13 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
                               "ENSMUSG00000048327", "ENSMUSG00000048922", "ENSMUSG00000054717", "ENSMUSG00000062248",
                               "ENSMUSG00000068744", "ENSMUSG00000074802"]
 
-        data = transformations[transformation](normalizations[normalization](data))
-        imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
+        G1_S_related_part_of_data = data.loc[G1_S_related_genes]
+        G2_M_related_part_of_data = data.loc[G2_M_related_genes]
 
-        make_sure_dir_exists(os.path.dirname(result_prefix))
+        return G1_S_related_part_of_data, G2_M_related_part_of_data
 
-        G1_S_related_part_of_imputed_data = imputed_data.loc[G1_S_related_genes]
-        G2_M_related_part_of_imputed_data = imputed_data.loc[G2_M_related_genes]
-
-        G1_S_heatmap_fig = go.Figure(layout=go.Layout(title='G1/S Related Genes', font=dict(size=5),
-                                                      xaxis=dict(title='Marker Genes', tickangle=60)))
-        G2_M_heatmap_fig = go.Figure(layout=go.Layout(title='G2/M Related Genes', font=dict(size=5),
-                                                      xaxis=dict(title='Marker Genes', tickangle=60)))
-
-        def normalize(df):
-            return df.subtract(df.mean(axis=1), axis=0).divide(df.std(axis=1), axis=0)
-
-        G1_S_heatmap_fig.add_heatmap(z=normalize(G1_S_related_part_of_imputed_data).values.T,
-                                     x=G1_S_related_part_of_imputed_data.index.values,
-                                     y=G1_S_related_part_of_imputed_data.columns.values,
-                                     colorscale='Viridis')
-        G2_M_heatmap_fig.add_heatmap(z=normalize(G2_M_related_part_of_imputed_data).values.T,
-                                     x=G2_M_related_part_of_imputed_data.index.values,
-                                     y=G2_M_related_part_of_imputed_data.columns.values,
-                                     colorscale='Viridis')
-
-        pio.write_image(G1_S_heatmap_fig, "%s_plot_%s.pdf" % (result_prefix, "G1_S_related_genes_heatmap"),
-                        width=600, height=700)
-        pio.write_image(G2_M_heatmap_fig, "%s_plot_%s.pdf" % (result_prefix, "G2_M_related_genes_heatmap"),
-                        width=600, height=700)
-
-        related_part_of_imputed_data = imputed_data.loc[G1_S_related_genes + G2_M_related_genes]
-        related_part_of_original_data = data.loc[G1_S_related_genes + G2_M_related_genes]
-
+    @staticmethod
+    def _get_embeddings(related_part_of_imputed_data):
         emb_pca = PCA(n_components=2). \
             fit_transform(related_part_of_imputed_data.transpose())
         emb_ica = FastICA(n_components=2). \
@@ -187,30 +157,80 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
             fit_transform(related_part_of_imputed_data.transpose())
         emb_tsne = TSNE(n_components=2, method='exact'). \
             fit_transform(related_part_of_imputed_data.transpose())
-        emb_umap = umap.UMAP(n_neighbors=4, min_dist=0.3, metric='correlation'). \
+        emb_umap = umap.UMAP(n_components=2, n_neighbors=4, min_dist=0.3, metric='correlation'). \
             fit_transform(related_part_of_imputed_data.transpose())
-
-        # test best LDA classifier on original data on imputed data
-        emb_lda_orig = LinearDiscriminantAnalysis(n_components=2). \
-            fit(related_part_of_original_data.transpose(),
-                gold_standard_classes).transform(related_part_of_imputed_data.transpose())
-
-        # test best LDA classifier on imputed data on original data
-        emb_lda_imputed = LinearDiscriminantAnalysis(n_components=2). \
-            fit(related_part_of_imputed_data.transpose(),
-                gold_standard_classes).transform(related_part_of_original_data.transpose())
 
         embedded_data = {
             "PCA": emb_pca,
             "ICA": emb_ica,
             "Truncated SVD": emb_tsvd,
             "tSNE": emb_tsne,
-            "UMAP": emb_umap,
-            "LDA on original data": emb_lda_orig,
-            "LDA on imputed data": emb_lda_imputed
+            "UMAP": emb_umap
         }
 
-        metric_results = dict()
+        return embedded_data
+
+    @staticmethod
+    def _get_classification_results(related_part_of_imputed_data, gold_standard_classes, repeats=10):
+        svm_results = []
+        knn_results = []
+        for algorithm in ["svm", "knn"]:
+            for i in range(repeats):
+                X_train, X_test, y_train, y_test = train_test_split(related_part_of_imputed_data.transpose().values,
+                                                                    gold_standard_classes,
+                                                                    test_size=0.25,
+                                                                    shuffle=True)
+                if algorithm == "svm":
+                    classifier = svm.SVC(gamma='scale')
+                    classifier.fit(X_train, y_train)
+                    svm_results.append(accuracy_score(y_test, classifier.predict(X_test)))
+                elif algorithm == "knn":
+                    classifier = KNeighborsClassifier(n_neighbors=3)
+                    classifier.fit(X_train, y_train)
+                    knn_results.append(accuracy_score(y_test, classifier.predict(X_test)))
+
+        return svm_results, knn_results
+
+    def evaluate_result(self, processed_count_file, result_dir, visualization, **kwargs):
+        normalization = kwargs['normalization']
+        transformation = kwargs['transformation']
+
+        make_sure_dir_exists(os.path.join(result_dir, "files"))
+        info = []
+
+        data, imputed_data = self._load_data_and_imputed_data_for_evaluation(processed_count_file)
+        gold_standard_classes = [column_name.split("_")[0] for column_name in data.columns.values]
+
+        imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
+
+        G1_S_related_part_of_imputed_data, G2_M_related_part_of_imputed_data = self._get_related_part(imputed_data)
+
+        related_part_of_imputed_data = pd.concat([G1_S_related_part_of_imputed_data,
+                                                  G2_M_related_part_of_imputed_data])
+
+        write_csv(G1_S_related_part_of_imputed_data,
+                  os.path.join(result_dir, "files", "G1_S_related_part_of_imputed_data.csv"))
+        info.append({'filename': 'G1_S_related_part_of_imputed_data.csv',
+                     'description': 'Vales of genes related to G1/S',
+                     'plot_description': 'Heatmap of Genes related to G1/S',
+                     })
+
+        write_csv(G2_M_related_part_of_imputed_data,
+                  os.path.join(result_dir, "files", "G2_M_related_part_of_imputed_data.csv"))
+        info.append({'filename': 'G2_M_related_part_of_imputed_data.csv',
+                     'description': 'Vales of genes related to G2/M',
+                     'plot_description': 'Heatmap of Genes related to G2/M',
+                     })
+
+        svm_results, knn_results = self._get_classification_results(related_part_of_imputed_data,
+                                                                    gold_standard_classes)
+
+        embedded_data = self._get_embeddings(related_part_of_imputed_data)
+
+        metric_results = {
+            "classification_svm_mean_accuracy": np.mean(svm_results),
+            "classification_knn_mean_accuracy": np.mean(knn_results)
+        }
 
         for i, embedding_name in enumerate(embedded_data):
             emb = embedded_data[embedding_name]
@@ -221,51 +241,119 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
             embedding_slug = embedding_name.replace(" ", "_").lower()
 
-            fig = go.Figure(layout=go.Layout(title='%s plot using marker genes' % embedding_name, font=dict(size=8)))
-
-            G1_indices = [i for i, c in enumerate(gold_standard_classes) if c == "G1"]
-            G2M_indices = [i for i, c in enumerate(gold_standard_classes) if c == "G2M"]
-            S_indices = [i for i, c in enumerate(gold_standard_classes) if c == "S"]
-            fig.add_scatter(x=emb[G1_indices, 0], y=emb[G1_indices, 1], mode='markers',
-                            marker=dict(color="red",
-                                        symbol=[["circle-open", "diamond", "cross"][c]
-                                                for c in clusters[G1_indices]]
-                                        ),
-                            name="G1 Phase")
-            fig.add_scatter(x=emb[G2M_indices, 0], y=emb[G2M_indices, 1], mode='markers',
-                            marker=dict(color="green",
-                                        symbol=[["circle-open", "diamond", "cross"][c]
-                                                for c in clusters[G2M_indices]]
-                                        ),
-                            name="G2/M Phase")
-            fig.add_scatter(x=emb[S_indices, 0], y=emb[S_indices, 1], mode='markers',
-                            marker=dict(color="blue",
-                                        symbol=[["circle-open", "diamond", "cross"][c]
-                                                for c in clusters[S_indices]]
-                                        ),
-                            name="S Phase")
-
-            pio.write_image(fig, "%s_plot_%s.pdf" % (result_prefix, embedding_slug),
-                            width=800, height=600)
+            embedding_df = pd.DataFrame({"X": emb[:, 0],
+                                         "Y": emb[:, 1],
+                                         "class": gold_standard_classes,
+                                         "k_means_clusters": clusters}, index=data.columns.values)
+            write_csv(embedding_df, os.path.join(result_dir, "files", "%s.csv" % embedding_slug))
+            info.append({'filename': "%s.csv" % embedding_slug,
+                         'description': '%s embedding of cells considering genes related '
+                                        'to cell-cycle' % embedding_name,
+                         'plot_description': '%s embedding of cells considering genes related '
+                                             'to cell-cycle (K-means clusters are marked '
+                                             'with different shapes)' % embedding_name,
+                         })
 
             metric_results.update({
-                '%s_adjusted_mutual_info_score' % embedding_slug:
+                'kmeans_on_%s_adjusted_mutual_info_score' % embedding_slug:
                     adjusted_mutual_info_score(gold_standard_classes, clusters, average_method="arithmetic"),
-                '%s_completeness_score' % embedding_slug:
+                'kmeans_on_%s_completeness_score' % embedding_slug:
                     completeness_score(gold_standard_classes, clusters),
-                '%s_calinski_harabaz_score' % embedding_slug:
+                'kmeans_on_%s_calinski_harabaz_score' % embedding_slug:
                     calinski_harabaz_score(emb, gold_standard_classes),
-                '%s_silhouette_score' % embedding_slug:
+                'embedding_%s_silhouette_score' % embedding_slug:
                     silhouette_score(emb, gold_standard_classes)
             })
 
-        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+        write_csv(pd.DataFrame(info), os.path.join(result_dir, "files", "info.csv"))
+
+        result_path = os.path.join(result_dir, "result.txt")
+        with open(result_path, 'w') as file:
             file.write("## METRICS:\n")
             for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, metric_results[metric]))
 
             file.write("##\n## ADDITIONAL INFO:\n")
+            file.write("## SVM classifiers accuracies: %s\n" % str(svm_results))
+            file.write("## KNN classifiers accuracies: %s\n" % str(knn_results))
 
-        log("Evaluation results saved to `%s_*`" % result_prefix)
+        log("Evaluation results saved to `%s`" % result_path)
+
+        if visualization != "none":
+            self.visualize_result(result_dir, output_type=visualization)
 
         return metric_results
+
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        info = read_table_file(os.path.join(result_dir, "files", "info.csv"))
+        info = info.set_index("filename")
+
+        G1_S_related_part_of_imputed_data = read_table_file(os.path.join(result_dir, "files",
+                                                                         "G1_S_related_part_of_imputed_data.csv"))
+        G2_M_related_part_of_imputed_data = read_table_file(os.path.join(result_dir, "files",
+                                                                         "G2_M_related_part_of_imputed_data.csv"))
+
+        embeddings = ["PCA", "ICA", "Truncated SVD", "tSNE", "UMAP"]
+        embedded_dfs = dict()
+        for embedding_name in embeddings:
+            embedding_slug = embedding_name.replace(" ", "_").lower()
+            embedded_dfs[embedding_name] = read_table_file(os.path.join(result_dir,
+                                                                         "files", "%s.csv" % embedding_slug))
+
+        if output_type == "pdf":
+            import plotly.graph_objs as go
+            import plotly.io as pio
+
+            G1_S_heatmap_fig = go.Figure(layout=go.Layout(title='Heatmap of Genes related to G1/S', font=dict(size=5),
+                                                          xaxis=dict(title='Marker Genes', tickangle=60)))
+            G2_M_heatmap_fig = go.Figure(layout=go.Layout(title='Heatmap of Genes related to G2/M', font=dict(size=5),
+                                                          xaxis=dict(title='Marker Genes', tickangle=60)))
+
+            def normalize(df):
+                return df.subtract(df.mean(axis=1), axis=0).divide(df.std(axis=1), axis=0)
+
+            G1_S_heatmap_fig.add_heatmap(z=normalize(G1_S_related_part_of_imputed_data).values.T,
+                                         x=G1_S_related_part_of_imputed_data.index.values,
+                                         y=G1_S_related_part_of_imputed_data.columns.values,
+                                         colorscale='Viridis')
+            G2_M_heatmap_fig.add_heatmap(z=normalize(G2_M_related_part_of_imputed_data).values.T,
+                                         x=G2_M_related_part_of_imputed_data.index.values,
+                                         y=G2_M_related_part_of_imputed_data.columns.values,
+                                         colorscale='Viridis')
+
+            pio.write_image(G1_S_heatmap_fig, os.path.join(result_dir, "plot_G1_S_related_genes_heatmap.pdf"),
+                            width=600, height=700)
+            pio.write_image(G2_M_heatmap_fig, os.path.join(result_dir, "plot_G2_M_related_genes_heatmap.pdf"),
+                            width=600, height=700)
+
+            embeddings = ["PCA", "ICA", "Truncated SVD", "tSNE", "UMAP"]
+            for i, embedding_name in enumerate(embeddings):
+                embedding_slug = embedding_name.replace(" ", "_").lower()
+
+                fig = go.Figure(layout=go.Layout(title='%s embedding of cells considering genes related '
+                                                       'to cell-cycle (K-means clusters are marked '
+                                                       'with different shapes)' % embedding_name,
+                                                 font=dict(size=8)))
+
+                embedding_df = embedded_dfs[embedding_name]
+                X = embedding_df["X"].values
+                Y = embedding_df["Y"].values
+                classes = embedding_df["class"].values
+                clusters = embedding_df["k_means_clusters"].values
+
+                for j, state in enumerate(["G1", "G2M", "S"]):
+                    indices = [k for k, c in enumerate(classes) if c == state]
+                    fig.add_scatter(x=X[indices], y=Y[indices], mode='markers',
+                                    marker=dict(color=["red", "green", "blue"][j],
+                                                symbol=[["circle-open", "diamond", "cross"][c]
+                                                        for c in clusters[indices]]
+                                                ),
+                                    name="%s Phase" % state)
+
+                pio.write_image(fig, os.path.join(result_dir, "plot_%s.pdf" % embedding_slug),
+                                width=800, height=600)
+
+        elif output_type == "html":
+            raise NotImplementedError()
+        else:
+            raise NotImplementedError()

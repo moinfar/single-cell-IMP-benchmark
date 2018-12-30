@@ -72,7 +72,7 @@ def evaluate_cell_cycle_test(args):
     uid = "%s_cell_cycle" % args.id
     evaluator = CellCyclePreservationEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_prefix,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
                                         normalization=args.normalization, transformation=args.transformation)
     print_metric_results(results)
 
@@ -81,7 +81,7 @@ def evaluate_clustering_test(args):
     uid = "%s_clustering" % args.id
     evaluator = ClusteringEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_prefix,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
                                         normalization=args.normalization, transformation=args.transformation)
     print_metric_results(results)
 
@@ -90,7 +90,7 @@ def evaluate_random_mask_test(args):
     uid = "%s_random_mask" % args.id
     evaluator = RandomMaskedLocationPredictionEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_prefix)
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization)
     print_metric_results(results)
 
 
@@ -98,7 +98,7 @@ def evaluate_down_sample_test(args):
     uid = "%s_down_sample" % args.id
     evaluator = DownSampledDataReconstructionEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_prefix,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
                                         transformation=args.transformation)
     print_metric_results(results)
 
@@ -107,7 +107,7 @@ def evaluate_paired_data_test(args):
     uid = "%s_paired_data" % args.id
     evaluator = PairedLQHQDataEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_prefix,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
                                         normalization=args.normalization, transformation=args.transformation)
     print_metric_results(results)
 
@@ -116,6 +116,54 @@ def evaluate_cite_seq_test(args):
     uid = "%s_cite_seq" % args.id
     evaluator = CITESeqEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_prefix,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
                                         transformation=args.transformation)
     print_metric_results(results)
+
+
+def visualize_cell_cycle_evaluation(args):
+    uid = "%s_cell_cycle" % args.id
+    evaluator = CellCyclePreservationEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    evaluator.visualize_result(args.result_dir, output_type=args.type)
+    print("Done.")
+
+
+def visualize_clustering_evaluation(args):
+    uid = "%s_clustering" % args.id
+    evaluator = ClusteringEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    evaluator.visualize_result(args.result_dir, output_type=args.type)
+    print("Done.")
+
+
+def visualize_random_mask_evaluation(args):
+    uid = "%s_random_mask" % args.id
+    evaluator = RandomMaskedLocationPredictionEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    evaluator.visualize_result(args.result_dir, output_type=args.type)
+    print("Done.")
+
+
+def visualize_down_sample_evaluation(args):
+    uid = "%s_down_sample" % args.id
+    evaluator = DownSampledDataReconstructionEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    evaluator.visualize_result(args.result_dir, output_type=args.type)
+    print("Done.")
+
+
+def visualize_paired_data_evaluation(args):
+    uid = "%s_paired_data" % args.id
+    evaluator = PairedLQHQDataEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    evaluator.visualize_result(args.result_dir, output_type=args.type)
+    print("Done.")
+
+
+def visualize_cite_seq_evaluation(args):
+    uid = "%s_cite_seq" % args.id
+    evaluator = CITESeqEvaluator(uid)
+    evaluator.set_seed(args.seed)
+    evaluator.visualize_result(args.result_dir, output_type=args.type)
+    print("Done.")

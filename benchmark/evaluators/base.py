@@ -33,14 +33,26 @@ class AbstractEvaluator:
         pass
 
     @abc.abstractmethod
-    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+    def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
         """
         Evaluates the result obtained from an algorithm.
         :param processed_count_file_path: The result which should be evaluated.
-        :param result_prefix: Prefix for files that evaluation results are stored in.
+        :param result_dir: Directory that evaluation results will be stored in.
+        :param visualization: Plotting format.
         :param kwargs: Other evaluator specific arguments.
         :return: Returns a dictionary containing entries of the form "criteria": "value".
-                 Note that evaluation results will also be saved in `result_file`
+                 Note that evaluation results will also be saved in `result_dir`
+        """
+        pass
+
+    @abc.abstractmethod
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        """
+        Visualize the results obtained from an evaluation.
+        :param result_dir: Directory in which, evaluation results are stored in.
+        :param output_type: Visualization output type (e.g. html, pdf, ...).
+        :param kwargs: Other visualization specific arguments.
+        :return: Visualize based on evaluator.
         """
         pass
 

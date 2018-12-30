@@ -78,12 +78,12 @@ class PairedLQHQDataEvaluator(AbstractEvaluator):
 
         return count_matrix_lq, original_columns, column_permutation, count_matrix_hq
 
-    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+    def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
         normalization = kwargs['normalization']
         transformation = kwargs['transformation']
 
         # Load hidden state and data
-        _, original_columns, column_permutation, count_matrix_hq = self._load_hidden_state()
+        count_matrix_lq, original_columns, column_permutation, count_matrix_hq = self._load_hidden_state()
 
         # Load imputed data
         imputed_data = read_table_file(processed_count_file_path)
@@ -97,19 +97,23 @@ class PairedLQHQDataEvaluator(AbstractEvaluator):
 
         # Evaluation
         mse_distances = []
+        mse_distances_lq_hq = []
         euclidean_distances = []
         sqeuclidean_distances = []
         cosine_distances = []
         correlation_distances = []
 
         for i in range(count_matrix_hq.shape[1]):
-            x = count_matrix_hq.values[:, i]
+            hq = count_matrix_hq.values[:, i]
+            lq = count_matrix_lq.values[:, i]
             y = imputed_data.values[:, i]
-            mse_distances.append(float(np.mean(np.where(x != 0, 1, 0) * np.square(x - y))))
-            euclidean_distances.append(pdist(np.vstack((x, y)), 'euclidean')[0])
-            sqeuclidean_distances.append(pdist(np.vstack((x, y)), 'sqeuclidean')[0])
-            cosine_distances.append(pdist(np.vstack((x, y)), 'cosine')[0])
-            correlation_distances.append(pdist(np.vstack((x, y)), 'correlation')[0])
+            mse_distances.append(float(np.mean(np.where(hq != 0, 1, 0) * np.square(hq - y))))
+            mse_distances_lq_hq.append(float(np.mean(
+                np.where(lq == 0, 1, 0) * 1 * np.where(hq != 0, 1, 0) * np.square(hq - y))))
+            euclidean_distances.append(pdist(np.vstack((hq, y)), 'euclidean')[0])
+            sqeuclidean_distances.append(pdist(np.vstack((hq, y)), 'sqeuclidean')[0])
+            cosine_distances.append(pdist(np.vstack((hq, y)), 'cosine')[0])
+            correlation_distances.append(pdist(np.vstack((hq, y)), 'correlation')[0])
 
         metric_results = {
             'cell_mean_squared_error_on_non_zeros': np.mean(mse_distances),
@@ -120,8 +124,9 @@ class PairedLQHQDataEvaluator(AbstractEvaluator):
         }
 
         # Save results to a file
-        make_sure_dir_exists(os.path.dirname(result_prefix))
-        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+        make_sure_dir_exists(os.path.join(result_dir, "files"))
+        result_path = os.path.join(result_dir, "result.txt")
+        with open(result_path, 'w') as file:
             file.write("## METRICS:\n")
             for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
@@ -137,9 +142,20 @@ class PairedLQHQDataEvaluator(AbstractEvaluator):
                                                            cosine_distances[i],
                                                            correlation_distances[i]))
 
-        log("Evaluation results saved to `%s_*`" % result_prefix)
+        log("Evaluation results saved to `%s`" % result_path)
+
+        if visualization != "none":
+            self.visualize_result(result_dir, output_type=visualization)
 
         return metric_results
+
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        if output_type == "pdf":
+            print("Nothing to visualize")
+        elif output_type == "html":
+            print("Nothing to visualize")
+        else:
+            raise NotImplementedError()
 
 
 class CITESeqEvaluator(AbstractEvaluator):
@@ -221,7 +237,9 @@ class CITESeqEvaluator(AbstractEvaluator):
 
         return count_rna, original_columns, column_permutation, count_adt, protein_rna_mapping
 
-    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+    def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
+        make_sure_dir_exists(os.path.join(result_dir, "files"))
+
         transformation = kwargs['transformation']
 
         # Load hidden state and data
@@ -243,6 +261,20 @@ class CITESeqEvaluator(AbstractEvaluator):
         rna = imputed_rna.loc[[protein_rna_mapping[prot] for prot in count_adt.index.values]]
         rna.index = ["gene_" + g for g in rna.index.values]
 
+        info = []
+
+        write_csv(adt, os.path.join(result_dir, "files", "adt.csv"))
+        info.append({'filename': "adt.csv",
+                     'description': 'Protein expressions (adt) after transformation',
+                     'plot_description': 'Protein expressions (adt) after transformation',
+                     })
+
+        write_csv(rna, os.path.join(result_dir, "files", "rna.csv"))
+        info.append({'filename': "rna.csv",
+                     'description': 'Gene expressions of genes related to adt data after transformation',
+                     'plot_description': 'Gene expressions of genes related to adt data after transformation',
+                     })
+
         n = adt.shape[0]
 
         # Calculating Spearman correlations
@@ -253,6 +285,14 @@ class CITESeqEvaluator(AbstractEvaluator):
         rna_rna_spearmanr = correlations.iloc[n:, n:]
         adt_rna_spearmanr = correlations.iloc[:n, n:]
 
+        write_csv(correlations, os.path.join(result_dir, "files", "spearman_correlations.csv"))
+        info.append({'filename': "spearman_correlations.csv",
+                     'description': 'Pairwise Spearman correlations (first n items are '
+                                    'adt expressions and second n items are rna expressions)',
+                     'plot_description': 'Pairwise Spearman correlations (first n items are '
+                                         'adt expressions and second n items are rna expressions)',
+                     })
+
         # Calculating Pearson correlations
         combined_df = pd.concat((adt, rna)).transpose()
         correlations = combined_df.corr(method="pearson")
@@ -260,6 +300,14 @@ class CITESeqEvaluator(AbstractEvaluator):
         adt_adt_pearsonr = correlations.iloc[:n, :n]
         rna_rna_pearsonr = correlations.iloc[n:, n:]
         adt_rna_pearsonr = correlations.iloc[:n, n:]
+
+        write_csv(correlations, os.path.join(result_dir, "files", "pearson_correlations.csv"))
+        info.append({'filename': "pearson_correlations.csv",
+                     'description': 'Pairwise Pearson correlations (first n items are '
+                                    'adt expressions and second n items are rna expressions)',
+                     'plot_description': 'Pairwise Pearson correlations (first n items are '
+                                         'adt expressions and second n items are rna expressions)',
+                     })
 
         # Evaluation
         metric_results = {
@@ -271,9 +319,11 @@ class CITESeqEvaluator(AbstractEvaluator):
                 np.mean((adt_adt_pearsonr.values - rna_rna_pearsonr.values) ** 2)
         }
 
+        write_csv(pd.DataFrame(info), os.path.join(result_dir, "files", "info.csv"))
+
         # Save results to a file
-        make_sure_dir_exists(os.path.dirname(result_prefix))
-        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+        result_path = os.path.join(result_dir, "result.txt")
+        with open(result_path, 'w') as file:
             file.write("## METRICS:\n")
             for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
@@ -292,6 +342,59 @@ class CITESeqEvaluator(AbstractEvaluator):
             file.write('## Spearman of rna/rna:\n')
             file.write("## " + "\n## ".join(rna_rna_spearmanr.to_string().split("\n")) + "\n")
 
-        log("Evaluation results saved to `%s_*`" % result_prefix)
+        log("Evaluation results saved to `%s`" % result_path)
+
+        if visualization != "none":
+            self.visualize_result(result_dir, output_type=visualization)
 
         return metric_results
+
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        info = read_table_file(os.path.join(result_dir, "files", "info.csv"))
+        info = info.set_index("filename")
+
+        spearman_correlations = read_table_file(os.path.join(result_dir, "files", "spearman_correlations.csv"))
+        pearson_correlations = read_table_file(os.path.join(result_dir, "files", "pearson_correlations.csv"))
+
+        n = spearman_correlations.shape[0] // 2
+
+        adt_adt_spearmanr = spearman_correlations.iloc[:n, :n]
+        rna_rna_spearmanr = spearman_correlations.iloc[n:, n:]
+        adt_rna_spearmanr = spearman_correlations.iloc[:n, n:]
+
+        adt_adt_pearsonr = pearson_correlations.iloc[:n, :n]
+        rna_rna_pearsonr = pearson_correlations.iloc[n:, n:]
+        adt_rna_pearsonr = pearson_correlations.iloc[:n, n:]
+
+        if output_type == "pdf":
+            import plotly.graph_objs as go
+            import plotly.io as pio
+
+            plots = [
+                ("Pairwise Spearman correlations between ADT values", adt_adt_spearmanr,
+                 "heatmap_adt_adt_spearmanr.pdf"),
+                ("Pairwise Spearman correlations between RNA values", rna_rna_spearmanr,
+                 "heatmap_rna_rna_spearmanr.pdf"),
+                ("Pairwise Spearman correlations between ADT and RNA values",
+                 adt_rna_spearmanr, "heatmap_adt_rna_spearmanr.pdf"),
+                ("Pairwise Pearson correlations between ADT values", adt_adt_pearsonr, "heatmap_adt_adt_pearsonr.pdf"),
+                ("Pairwise Pearson correlations between RNA values", rna_rna_pearsonr, "heatmap_rna_rna_pearsonr.pdf"),
+                ("Pairwise Pearson correlations between ADT and RNA values",
+                 adt_rna_pearsonr, "heatmap_adt_rna_pearsonr.pdf")
+            ]
+
+            for title, data_frame, filename in plots:
+                fig = go.Figure(layout=go.Layout(title=title, font=dict(size=9)))
+
+                fig.add_heatmap(z=data_frame.values,
+                                x=data_frame.columns.values,
+                                y=data_frame.index.values,
+                                colorscale='Picnic')  # RdBu is also good
+
+                pio.write_image(fig, os.path.join(result_dir, filename),
+                                width=600, height=700)
+
+        elif output_type == "html":
+            print("Nothing to visualize")
+        else:
+            raise NotImplementedError()

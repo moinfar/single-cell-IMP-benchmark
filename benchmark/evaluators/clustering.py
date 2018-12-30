@@ -1,20 +1,19 @@
 import os
 
-import colorlover as cl
 import numpy as np
+import pandas as pd
 import umap
-from plotly import graph_objs as go, io as pio
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA, FastICA, TruncatedSVD
 from sklearn.manifold import TSNE
 from sklearn.metrics import adjusted_mutual_info_score, completeness_score, calinski_harabaz_score, silhouette_score
 
-from evaluators.base import AbstractEvaluator
-from general.conf import settings
-from utils.base import make_sure_dir_exists, dump_gzip_pickle, log, load_gzip_pickle
 from data.data_set import get_data_set_class
 from data.io import write_csv, read_table_file
 from data.operations import shuffle_and_rename_columns, rearrange_and_rename_columns, normalizations, transformations
+from evaluators.base import AbstractEvaluator
+from general.conf import settings
+from utils.base import make_sure_dir_exists, dump_gzip_pickle, log, load_gzip_pickle
 from utils.plotting import ployly_symbols
 
 
@@ -45,6 +44,11 @@ class ClusteringEvaluator(AbstractEvaluator):
             count_matrix = self.data_set.get("data")
             details = self.data_set.get("details")
             classes = details.loc[["class"]]
+            return count_matrix, classes
+        elif self.data_set_name.startswith("GSE84133") or self.data_set_name.startswith("BARON"):
+            count_matrix = self.data_set.get("data")
+            details = self.data_set.get("details")
+            classes = details.loc[["assigned_cluster"]]
             return count_matrix, classes
         else:
             raise NotImplementedError()
@@ -83,29 +87,13 @@ class ClusteringEvaluator(AbstractEvaluator):
 
         return count_matrix, classes, original_columns, column_permutation
 
-    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
-        normalization = kwargs['normalization']
-        transformation = kwargs['transformation']
-
-        # Load hidden state and data
-        count_matrix, classes, original_columns, column_permutation = self._load_hidden_state()
-
-        # Load imputed data
-        imputed_data = read_table_file(processed_count_file_path)
-
-        # Restore column names and order
-        imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
-
-        # Data transformations
-        imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
-
-        # Evaluation
-        metric_results = dict()
-
+    def _get_embeddings(self, imputed_data):
         log("Fitting PCA ...")
         emb_pca = PCA(n_components=5). \
             fit_transform(imputed_data.transpose())
         log("Fitting ICA ...")
+        emb_ica_2d = FastICA(n_components=2). \
+            fit_transform(imputed_data.transpose())
         emb_ica = FastICA(n_components=5). \
             fit_transform(imputed_data.transpose())
         log("Fitting TruncatedSVD ...")
@@ -122,64 +110,144 @@ class ClusteringEvaluator(AbstractEvaluator):
 
         embedded_data = {
             "PCA": (emb_pca, emb_pca),
-            "ICA": (emb_ica, emb_ica),
+            "ICA": (emb_ica, emb_ica_2d),
             "Truncated SVD": (emb_tsvd, emb_tsvd),
             "tSNE": (emb_tsne, emb_tsne_2d),
             "UMAP": (emb_umap, emb_umap)
         }
 
+        return embedded_data
+
+    def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
+        normalization = kwargs['normalization']
+        transformation = kwargs['transformation']
+
+        make_sure_dir_exists(os.path.join(result_dir, "files"))
+        info = []
+
+        # Load hidden state and data
+        count_matrix, classes, original_columns, column_permutation = self._load_hidden_state()
+
+        # Load imputed data
+        imputed_data = read_table_file(processed_count_file_path)
+
+        # Restore column names and order
+        imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
+
+        # Data transformations
+        imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
+
+        # Save class details for future
+        write_csv(classes, os.path.join(result_dir, "files", "classes.csv" ))
+
+        # Evaluation
+        metric_results = dict()
+
+        embedded_data = self._get_embeddings(imputed_data)
+
         log("Evaluating ...")
-        for l in range(classes.shape[0]):
-            class_names = classes.iloc[l].values
+        for class_label in classes.index.values:
+            class_names = classes.loc[class_label].values
             for embedding_name in embedded_data:
                 emb, emb_2d = embedded_data[embedding_name]
+
+                embedding_slug = embedding_name.replace(" ", "_").lower()
 
                 k_means = KMeans(n_clusters=len(set(class_names)))
                 k_means.fit(emb)
                 clusters = k_means.predict(emb)
 
-                embedding_slug = embedding_name.replace(" ", "_").lower()
-
-                fig = go.Figure(
-                    layout=go.Layout(title='%s plot' % embedding_name, font=dict(size=8)))
-
-                if len(set(class_names)) <= 20:
-                    color_scale = (cl.scales['9']['qual']['Set1'] + cl.scales['12']['qual']['Set3'])
-                else:
-                    color_scale = ['hsl(' + str(h) + ',50%' + ',50%)'
-                                   for h in np.random.permutation(np.linspace(0, 350, len(set(class_names))))]
-
-                for i, class_name in enumerate(list(sorted(set(class_names)))):
-                    indices = [j for j, c in enumerate(class_names) if c == class_name]
-                    color = color_scale[i]
-                    fig.add_scatter(x=emb_2d[indices, 0], y=emb_2d[indices, 1], mode='markers',
-                                    marker=dict(color=color, opacity=0.5,
-                                                symbol=[ployly_symbols[c]
-                                                        for c in clusters[indices]]
-                                                ),
-                                    name=class_name)
-
-                pio.write_image(fig, "%s_%s_plot_%s.pdf" % (result_prefix, classes.index.values[l], embedding_slug),
-                                width=800, height=600)
+                embedding_df = pd.DataFrame(emb)
+                embedding_df["X"] = emb_2d[:, 0]
+                embedding_df["Y"] = emb_2d[:, 1]
+                embedding_df["class"] = class_names
+                embedding_df["k_means_clusters"] = clusters
+                write_csv(embedding_df, os.path.join(result_dir, "files", "%s_%s.csv" % (class_label, embedding_slug)))
+                info.append({'filename': "%s_%s.csv" % (class_label, embedding_slug),
+                             'description': '%s embedding of cells along %s labels' % (embedding_name, class_label),
+                             'plot_description': '%s embedding of cells along %s labels (Classes can be identified '
+                                                 'with their colors and K-means clusters are marked '
+                                                 'with different shapes)' % (embedding_name, class_label),
+                             })
 
                 metric_results.update({
-                    '%s_%s_adjusted_mutual_info_score' % (embedding_slug, classes.index.values[l]):
+                    'kmeans_on_%s_%s_adjusted_mutual_info_score' % (embedding_slug, class_label):
                         adjusted_mutual_info_score(class_names, clusters, average_method="arithmetic"),
-                    '%s_%s_completeness_score' % (embedding_slug, classes.index.values[l]):
+                    'kmeans_on_%s_%s_completeness_score' % (embedding_slug, class_label):
                         completeness_score(class_names, clusters),
-                    '%s_%s_calinski_harabaz_score' % (embedding_slug, classes.index.values[l]):
+                    'embedding_%s_%s_calinski_harabaz_score' % (embedding_slug, class_label):
                         calinski_harabaz_score(emb, class_names),
-                    '%s_%s_silhouette_score' % (embedding_slug, classes.index.values[l]):
+                    'embedding_%s_%s_silhouette_score' % (embedding_slug, class_label):
                         silhouette_score(emb, class_names)
                 })
 
-        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+        write_csv(pd.DataFrame(info), os.path.join(result_dir, "files", "info.csv"))
+
+        result_path = os.path.join(result_dir, "result.txt")
+        with open(result_path, 'w') as file:
             file.write("## METRICS:\n")
             for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, metric_results[metric]))
 
             file.write("##\n## ADDITIONAL INFO:\n")
 
-        log("Evaluation results saved to `%s_*`" % result_prefix)
+        log("Evaluation results saved to `%s`" % result_path)
+
+        if visualization != "none":
+            self.visualize_result(result_dir, output_type=visualization)
 
         return metric_results
+
+    @staticmethod
+    def _get_color_scales(class_names):
+        import colorlover as cl
+
+        if len(set(class_names)) <= 20:
+            color_scale = (cl.scales['9']['qual']['Set1'] + cl.scales['12']['qual']['Set3'])
+        else:
+            color_scale = ['hsl(' + str(h) + ',50%' + ',50%)'
+                           for h in np.random.permutation(np.linspace(0, 350, len(set(class_names))))]
+        return color_scale
+
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        info = read_table_file(os.path.join(result_dir, "files", "info.csv"))
+        info = info.set_index("filename")
+
+        classes = read_table_file(os.path.join(result_dir, "files", "classes.csv"))
+
+        embeddings = ["PCA", "ICA", "Truncated SVD", "tSNE", "UMAP"]
+
+        if output_type == "pdf":
+            from plotly import graph_objs as go, io as pio
+
+            for class_label in classes.index.values:
+                class_names = classes.loc[class_label].astype("str").values
+                for embedding_name in embeddings:
+                    embedding_slug = embedding_name.replace(" ", "_").lower()
+                    filename = "%s_%s.csv" % (class_label, embedding_slug)
+                    embedded_df = read_table_file(os.path.join(result_dir, "files", filename))
+
+                    fig = go.Figure(layout=go.Layout(title=info.loc[filename]["plot_description"],
+                                                     font=dict(size=8)))
+
+                    color_scale = self._get_color_scales(class_names)
+                    clusters = embedded_df["k_means_clusters"].values
+                    X = embedded_df["X"].values
+                    Y = embedded_df["Y"].values
+
+                    for i, class_name in enumerate(list(sorted(set(class_names)))):
+                        indices = [j for j, c in enumerate(class_names) if c == class_name]
+                        color = color_scale[i]
+                        fig.add_scatter(x=X[indices], y=Y[indices], mode='markers',
+                                        marker=dict(color=color, opacity=0.5,
+                                                    symbol=[ployly_symbols[c]
+                                                            for c in clusters[indices]]
+                                                    ),
+                                        name=class_name)
+
+                    pio.write_image(fig, os.path.join(result_dir, "plot_%s_%s.pdf" % (class_label, embedding_slug)),
+                                    width=800, height=600)
+        elif output_type == "html":
+            raise NotImplementedError()
+        else:
+            raise NotImplementedError()

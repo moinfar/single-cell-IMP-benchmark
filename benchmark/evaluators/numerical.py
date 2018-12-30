@@ -2,17 +2,15 @@ import os
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objs as go
-import plotly.io as pio
 from scipy.spatial.distance import pdist
 from scipy.stats import pearsonr, spearmanr
 
-from evaluators.base import AbstractEvaluator
-from general import settings
-from utils.base import make_sure_dir_exists, log, dump_gzip_pickle, load_gzip_pickle
 from data.data_set import get_data_set_class
 from data.io import write_csv, read_table_file
 from data.operations import shuffle_and_rename_columns, rearrange_and_rename_columns, transformations
+from evaluators.base import AbstractEvaluator
+from general import settings
+from utils.base import make_sure_dir_exists, log, dump_gzip_pickle, load_gzip_pickle
 
 
 class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
@@ -53,7 +51,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
             related_indices = np.where(np.logical_and(x <= gene_means, gene_means < x + 1))[0]
             if related_indices.shape[0] == 0:
                 continue
-            threshold = np.quantile((gene_vars - gene_means)[related_indices], 1 - hvg_frac)
+            threshold = np.percentile((gene_vars - gene_means)[related_indices], 100 * (1 - hvg_frac))
             hvg_indices.update(list(np.where(np.logical_and.reduce((x <= gene_means,
                                                                     gene_means < x + 1,
                                                                     gene_vars - gene_means >= threshold)))[0]))
@@ -95,7 +93,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         # Elimination
         low_quality_data = data * (1 - mask.values)
-        
+
         is_nonzero = np.sum(low_quality_data, axis=1) > 0
         mask = mask[is_nonzero].copy()
         data = data[is_nonzero].copy()
@@ -128,7 +126,10 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         return data, mask, original_columns, column_permutation
 
-    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+    def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
+        make_sure_dir_exists(os.path.join(result_dir, "files"))
+        info = []
+
         # Load hidden state and data
         data, mask, original_columns, column_permutation = self._load_hidden_state()
 
@@ -173,29 +174,19 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         original_values = np.asarray(original_values)
         predicted_values = np.asarray(predicted_values)
-        
-        max_axis = float(max(original_values.max(), predicted_values.max()))
-        fig = go.Figure(layout=go.Layout(title='Prediction plot (log scale)', font=dict(size=12),
-                        xaxis=go.layout.XAxis(range=[0, transformations["log"](max_axis)]),
-                        yaxis=go.layout.YAxis(range=[0, transformations["log"](max_axis)])))
-        fig.add_scatter(x=transformations["log"](original_values),
-                        y=transformations["log"](predicted_values),
-                        mode='markers', marker=dict(opacity=0.3))
-        pio.write_image(fig, "%s_prediction_plot_log_scale.pdf" % result_prefix,
-                        width=800, height=800)
 
-        fig = go.Figure(layout=go.Layout(title='Prediction plot (sqrt scale)', font=dict(size=12),
-                        xaxis=go.layout.XAxis(range=[0, transformations["sqrt"](max_axis)]), 
-                        yaxis=go.layout.YAxis(range=[0, transformations["sqrt"](max_axis)])))
-        fig.add_scatter(x=transformations["sqrt"](original_values),
-                        y=transformations["sqrt"](predicted_values),
-                        mode='markers', marker=dict(opacity=0.3))
-        pio.write_image(fig, "%s_prediction_plot_sqrt_scale.pdf" % result_prefix,
-                        width=800, height=800)
+        predictions_df = pd.DataFrame({'original': original_values, 'predicted': predicted_values})
+        write_csv(predictions_df, os.path.join(result_dir, "files", "predictions.csv"))
+        info.append({'filename': "predictions.csv",
+                     'description': 'Original masked values along predicted values',
+                     'plot_description': 'Predicted values vs. original masked values',
+                     })
+
+        write_csv(pd.DataFrame(info), os.path.join(result_dir, "files", "info.csv"))
 
         # Save results to a file
-        make_sure_dir_exists(os.path.dirname(result_prefix))
-        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+        result_path = os.path.join(result_dir, "result.txt")
+        with open(result_path, 'w') as file:
             file.write("## METRICS:\n")
             for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, metric_results[metric]))
@@ -208,9 +199,42 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
                                                    data.iloc[x, y],
                                                    imputed_data.iloc[x, y]))
 
-        log("Evaluation results saved to `%s_*`" % result_prefix)
+        log("Evaluation results saved to `%s`" % result_path)
+
+        if visualization != "none":
+            self.visualize_result(result_dir, output_type=visualization)
 
         return metric_results
+
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        info = read_table_file(os.path.join(result_dir, "files", "info.csv"))
+        info = info.set_index("filename")
+
+        predictions = read_table_file(os.path.join(result_dir, "files", "predictions.csv"))
+        original_values = predictions["original"]
+        predicted_values = predictions["predicted"]
+
+        if output_type == "pdf":
+            import plotly.graph_objs as go
+            import plotly.io as pio
+
+            max_axis = float(max(original_values.max(), predicted_values.max()))
+            for transformation_name in ["log", "sqrt"]:
+                transformation = transformations[transformation_name]
+
+                fig = go.Figure(layout=go.Layout(title='Predicted values vs. original masked values (%s scale)' %
+                                                       transformation_name, font=dict(size=12),
+                                                 xaxis=go.layout.XAxis(range=[0, transformation(max_axis)]),
+                                                 yaxis=go.layout.YAxis(range=[0, transformation(max_axis)])))
+                fig.add_scatter(x=transformation(original_values),
+                                y=transformation(predicted_values),
+                                mode='markers', marker=dict(opacity=0.3))
+                pio.write_image(fig, os.path.join(result_dir, "prediction_plot_%s_scale.pdf" % transformation_name),
+                                width=800, height=800)
+        elif output_type == "html":
+            raise NotImplementedError()
+        else:
+            raise NotImplementedError()
 
 
 class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
@@ -294,8 +318,10 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
 
         return scaled_data, original_columns, column_permutation
 
-    def evaluate_result(self, processed_count_file_path, result_prefix, **kwargs):
+    def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
         transformation = kwargs['transformation']
+
+        make_sure_dir_exists(os.path.join(result_dir, "files"))
 
         # Load hidden state and data
         scaled_data, original_columns, column_permutation = self._load_hidden_state()
@@ -370,8 +396,8 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         }
 
         # Save results to a file
-        make_sure_dir_exists(os.path.dirname(result_prefix))
-        with open("%s_summary_all.txt" % result_prefix, 'w') as file:
+        result_path = os.path.join(result_dir, "result.txt")
+        with open(result_path, 'w') as file:
             file.write("## METRICS:\n")
             for metric in sorted(metric_results):
                 file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
@@ -387,6 +413,17 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
                                                            cosine_distances[i],
                                                            correlation_distances[i]))
 
-        log("Evaluation results saved to `%s_*`" % result_prefix)
+        log("Evaluation results saved to `%s`" % result_path)
+
+        if visualization != "none":
+            self.visualize_result(result_dir, output_type=visualization)
 
         return metric_results
+
+    def visualize_result(self, result_dir, output_type, **kwargs):
+        if output_type == "pdf":
+            print("Nothing to visualize")
+        elif output_type == "html":
+            print("Nothing to visualize")
+        else:
+            raise NotImplementedError()

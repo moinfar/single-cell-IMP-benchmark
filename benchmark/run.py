@@ -4,7 +4,9 @@ from general.conf import settings
 from main import generate_cell_cycle_test, handle_main_arguments, evaluate_random_mask_test, \
     evaluate_cell_cycle_test, generate_random_mask_test, generate_down_sample_test, evaluate_down_sample_test, \
     generate_clustering_test, evaluate_clustering_test, evaluate_paired_data_test, generate_paired_data_test, \
-    evaluate_cite_seq_test, generate_cite_seq_test
+    evaluate_cite_seq_test, generate_cite_seq_test, visualize_cell_cycle_evaluation, visualize_clustering_evaluation, \
+    visualize_random_mask_evaluation, visualize_down_sample_evaluation, visualize_paired_data_evaluation, \
+    visualize_cite_seq_evaluation
 from utils.base import log
 
 
@@ -20,8 +22,10 @@ def generate_parser():
     subparsers = main_parser.add_subparsers(help='action to perform')
     parser_generate = subparsers.add_parser('generate', help='generate a count file to impute')
     subparsers_generate = parser_generate.add_subparsers(help='type of benchmark')
-    parser_evaluate = subparsers.add_parser('evaluate', help='evaluate a count file to impute')
+    parser_evaluate = subparsers.add_parser('evaluate', help='evaluate an imputed count file')
     subparsers_evaluate = parser_evaluate.add_subparsers(help='type of benchmark')
+    parser_visualize = subparsers.add_parser('visualize', help='visualize an already evaluated experiment')
+    subparsers_visualize = parser_visualize.add_subparsers(help='type of benchmark')
 
     # Define global arguments
     main_parser.add_argument('--seed', '-S', metavar='N', type=int,
@@ -94,7 +98,7 @@ def generate_parser():
     parser_generate_cite_seq = subparsers_generate.add_parser('cite-seq')
     parser_generate_cite_seq.set_defaults(function=generate_cite_seq_test)
     parser_generate_cite_seq.add_argument('--data-set', '-d', metavar='DS',
-                                          type=str, default='CITE_CBMC',
+                                          type=str, default='CITE-CBMC',
                                           help='Dataset which has RNA and ADT data (must have RNA and ADT keys)')
 
     # Define evaluate commands
@@ -102,9 +106,11 @@ def generate_parser():
     parser_evaluate.add_argument('--input', '-i', metavar='IMPUTED_COUNT_FILE',
                                  type=str, required=True,
                                  help='Address of file containing imputed count matrix')
-    parser_evaluate.add_argument('--result-prefix', '-r', metavar='RESULT_PREFIX',
+    parser_evaluate.add_argument('--result-dir', '-r', metavar='RESULT_DIR',
                                  type=str, required=True,
-                                 help='Prefix for files where evaluation result will be stored in')
+                                 help='The directory where the evaluation results will be stored in')
+    parser_evaluate.add_argument('--visualization', '-v', choices=['none', 'pdf', 'html'], default='none',
+                                 help='Plotting format.')
 
     parser_evaluate_cell_cycle = subparsers_evaluate.add_parser('cell-cycle')
     parser_evaluate_cell_cycle.set_defaults(function=evaluate_cell_cycle_test)
@@ -140,6 +146,32 @@ def generate_parser():
     parser_evaluate_cite_seq.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
                                           help='Transformation to be applied before evaluation.')
 
+    # Define visualization commands
+    parser_visualize.set_defaults(default_function=parser_visualize.print_help)
+    parser_visualize.add_argument('--result-dir', '-r', metavar='RESULT_DIR',
+                                  type=str, required=True,
+                                  help='The directory where the evaluation results are stored in')
+    parser_visualize.add_argument('--type', '-t', choices=['none', 'pdf', 'html'], default='html',
+                                  help='Plotting format.')
+
+    parser_visualize_cell_cycle = subparsers_visualize.add_parser('cell-cycle')
+    parser_visualize_cell_cycle.set_defaults(function=visualize_cell_cycle_evaluation)
+
+    parser_visualize_clustering = subparsers_visualize.add_parser('clustering')
+    parser_visualize_clustering.set_defaults(function=visualize_clustering_evaluation)
+
+    parser_visualize_random_mask = subparsers_visualize.add_parser('random-mask')
+    parser_visualize_random_mask.set_defaults(function=visualize_random_mask_evaluation)
+
+    parser_visualize_down_sample = subparsers_visualize.add_parser('down-sample')
+    parser_visualize_down_sample.set_defaults(function=visualize_down_sample_evaluation)
+
+    parser_visualize_paired_data = subparsers_visualize.add_parser('paired-data')
+    parser_visualize_paired_data.set_defaults(function=visualize_paired_data_evaluation)
+
+    parser_visualize_cite_seq= subparsers_visualize.add_parser('cite-seq')
+    parser_visualize_cite_seq.set_defaults(function=visualize_cite_seq_evaluation)
+
     return main_parser
 
 
@@ -148,7 +180,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if settings.DEBUG:
-        log(str(args))
+        log("Running with arguments: " + str(args))
 
     handle_main_arguments(args)
 
