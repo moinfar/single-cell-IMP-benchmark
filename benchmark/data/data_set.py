@@ -52,7 +52,7 @@ class DataSet_ERP006670(DataSet):
         self.G2M_DATA_PATH = os.path.join(self.DATA_SET_DIR, "G2M_singlecells_counts.txt")
         self.S_DATA_PATH = os.path.join(self.DATA_SET_DIR, "S_singlecells_counts.txt")
 
-        self.KEYS = ["G1", "G2M", "S"]
+        self.KEYS = ["G1", "G2M", "S", "data"]
 
     def _download_data_set(self):
         make_sure_dir_exists(os.path.dirname(self.DATA_SET_FILE_PATH))
@@ -70,8 +70,38 @@ class DataSet_ERP006670(DataSet):
     def keys(self):
         return self.KEYS
 
+    def _merge_and_return_data(self):
+        data_G1 = self.get("G1")
+        data_G2M = self.get("G2M")
+        data_S = self.get("S")
+
+        shared_columns = ['EnsemblGeneID', 'EnsemblTranscriptID', 'AssociatedGeneName', 'GeneLength']
+
+        merged_data = pd.merge(data_G1,
+                               pd.merge(data_G2M, data_S, on=shared_columns),
+                               on=shared_columns)
+
+        merged_data = merged_data.drop(columns=['EnsemblTranscriptID',
+                                                'AssociatedGeneName',
+                                                'GeneLength'])
+
+        merged_data = merged_data.set_index('EnsemblGeneID')
+        merged_data.index.names = ['Symbol']
+        merged_data = merged_data.drop(['Ambiguous', 'No_feature', 'Not_aligned',
+                                        'Too_low_aQual', 'Aligned'])
+
+        assert merged_data.shape == (38385, 288)
+
+        # remove zero-sum rows
+        merged_data = merged_data[merged_data.sum(axis=1) > 0]
+
+        return merged_data
+
     def get(self, key):
         assert key in self.keys()
+
+        if key == "data":
+            return self._merge_and_return_data()
 
         key_to_data_path_mapping = {
             "G1": self.G1_DATA_PATH,
@@ -495,7 +525,7 @@ class DataSet_GSE100866(DataSet):
 class DataSet_GSE100866_CBMC(DataSet):
     def __init__(self):
         self.ds = DataSet_GSE100866()
-        self.KEYS = ["RNA", "ADT", "ADT-clr"]
+        self.KEYS = ["RNA", "ADT", "ADT-clr", "data"]
 
     def prepare(self):
         self.ds.prepare()
@@ -504,6 +534,8 @@ class DataSet_GSE100866_CBMC(DataSet):
         return self.KEYS
 
     def get(self, key):
+        if key == "data":
+            key = "RNA"
         return self.ds.get("CBMC-%s" % key)
 
     def info(self):
@@ -519,7 +551,7 @@ class DataSet_GSE100866_CBMC(DataSet):
 class DataSet_GSE100866_PBMC(DataSet):
     def __init__(self):
         self.ds = DataSet_GSE100866()
-        self.KEYS = ["RNA", "ADT", "ADT-clr"]
+        self.KEYS = ["RNA", "ADT", "ADT-clr", "data"]
 
     def prepare(self):
         self.ds.prepare()
@@ -528,6 +560,8 @@ class DataSet_GSE100866_PBMC(DataSet):
         return self.KEYS
 
     def get(self, key):
+        if key == "data":
+            key = "RNA"
         return self.ds.get("PBMC-%s" % key)
 
     def info(self):
@@ -543,7 +577,7 @@ class DataSet_GSE100866_PBMC(DataSet):
 class DataSet_GSE100866_CD8(DataSet):
     def __init__(self):
         self.ds = DataSet_GSE100866()
-        self.KEYS = ["RNA", "ADT", "ADT-clr"]
+        self.KEYS = ["RNA", "ADT", "ADT-clr", "data"]
 
     def prepare(self):
         self.ds.prepare()
@@ -552,6 +586,8 @@ class DataSet_GSE100866_CD8(DataSet):
         return self.KEYS
 
     def get(self, key):
+        if key == "data":
+            key = "RNA"
         return self.ds.get("CD8-%s" % key)
 
     def info(self):
