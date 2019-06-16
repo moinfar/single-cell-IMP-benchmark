@@ -72,7 +72,7 @@ def evaluate_cell_cycle_test(args):
     uid = "%s_cell_cycle" % args.id
     evaluator = CellCyclePreservationEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization, clear_cache=args.clear_cache,
                                         normalization=args.normalization, transformation=args.transformation)
     print_metric_results(results)
 
@@ -81,7 +81,7 @@ def evaluate_clustering_test(args):
     uid = "%s_clustering" % args.id
     evaluator = ClusteringEvaluator(uid)
     evaluator.set_seed(args.seed)
-    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization,
+    results = evaluator.evaluate_result(args.input, args.result_dir, visualization=args.visualization, clear_cache=args.clear_cache,
                                         normalization=args.normalization, transformation=args.transformation)
     print_metric_results(results)
 

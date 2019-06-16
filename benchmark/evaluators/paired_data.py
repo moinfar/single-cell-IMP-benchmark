@@ -90,35 +90,38 @@ class PairedLQHQDataEvaluator(AbstractEvaluator):
 
         # Restore column names and order
         imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
+        
+        # Replace negative values with zero
+        imputed_data = imputed_data.clip(lower=0)
 
         # Data transformations
         imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
         count_matrix_hq = transformations[transformation](normalizations[normalization](count_matrix_hq))
 
         # Evaluation
-        mse_distances = []
-        mse_distances_lq_hq = []
+        rmse_distances = []
+        mae_distances = []
         euclidean_distances = []
-        sqeuclidean_distances = []
         cosine_distances = []
         correlation_distances = []
 
         for i in range(count_matrix_hq.shape[1]):
-            hq = count_matrix_hq.values[:, i]
-            lq = count_matrix_lq.values[:, i]
-            y = imputed_data.values[:, i]
-            mse_distances.append(float(np.mean(np.where(hq != 0, 1, 0) * np.square(hq - y))))
-            mse_distances_lq_hq.append(float(np.mean(
-                np.where(lq == 0, 1, 0) * 1 * np.where(hq != 0, 1, 0) * np.square(hq - y))))
+            non_zeros = np.logical_and(count_matrix_hq.values[:, i] > 0, count_matrix_lq.values[:, i] == 0)
+            hq = count_matrix_hq.values[non_zeros, i]
+            lq = count_matrix_lq.values[non_zeros, i]
+            y = imputed_data.values[non_zeros, i]
+            if np.sum(y) > 0:
+                y = y * np.sum(hq) / np.sum(y)
+            rmse_distances.append(float(np.mean(np.square(hq - y) ** 0.5)))
+            mae_distances.append(float(np.mean(np.abs(hq - y))))
             euclidean_distances.append(pdist(np.vstack((hq, y)), 'euclidean')[0])
-            sqeuclidean_distances.append(pdist(np.vstack((hq, y)), 'sqeuclidean')[0])
             cosine_distances.append(pdist(np.vstack((hq, y)), 'cosine')[0])
             correlation_distances.append(pdist(np.vstack((hq, y)), 'correlation')[0])
 
         metric_results = {
-            'cell_mean_squared_error_on_non_zeros': np.mean(mse_distances),
+            'cell_root_mean_squared_error': np.mean(rmse_distances),
+            'cell_mean_absolute_error': np.mean(mae_distances),
             'cell_mean_euclidean_distance': np.mean(euclidean_distances),
-            'cell_mean_sqeuclidean_distance': np.mean(sqeuclidean_distances),
             'cell_mean_cosine_distance': np.mean(cosine_distances),
             'cell_mean_correlation_distance': np.mean(correlation_distances)
         }
@@ -132,13 +135,13 @@ class PairedLQHQDataEvaluator(AbstractEvaluator):
                 file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
 
             file.write("##\n## ADDITIONAL INFO:\n")
-            file.write("# CELL\tmean_squared_error_on_non_zeros\tmean_euclidean_distance\t"
-                       "mean_sqeuclidean_distance\tmean_cosine_distance\tmean_correlation_distance:\n")
+            file.write("# CELL\troot_mean_squared_error\tmean_absolute_error\tmean_euclidean_distance\t"
+                       "mean_cosine_distance\tmean_correlation_distance:\n")
             for i in range(count_matrix_hq.shape[1]):
                 file.write("# %s\t%f\t%f\t%f\t%f\t%f\n" % (count_matrix_hq.columns.values[i],
-                                                           mse_distances[i],
+                                                           rmse_distances[i],
+                                                           mae_distances[i],
                                                            euclidean_distances[i],
-                                                           sqeuclidean_distances[i],
                                                            cosine_distances[i],
                                                            correlation_distances[i]))
 
@@ -256,9 +259,9 @@ class CITESeqEvaluator(AbstractEvaluator):
         count_adt = transformations[transformation](count_adt)
 
         # Use related data
-        adt = count_adt.copy()
+        adt = count_adt.loc[[prot for prot in count_adt.index.values if (protein_rna_mapping[prot] in imputed_rna.index.values)]].copy()
         adt.index = ["prot_" + p for p in adt.index.values]
-        rna = imputed_rna.loc[[protein_rna_mapping[prot] for prot in count_adt.index.values]]
+        rna = imputed_rna.loc[[protein_rna_mapping[prot] for prot in count_adt.index.values if (protein_rna_mapping[prot] in imputed_rna.index.values)]]
         rna.index = ["gene_" + g for g in rna.index.values]
 
         info = []

@@ -6,7 +6,7 @@ import umap
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA, FastICA, TruncatedSVD
 from sklearn.manifold import TSNE
-from sklearn.metrics import adjusted_mutual_info_score, completeness_score, calinski_harabaz_score, silhouette_score
+from sklearn.metrics import adjusted_mutual_info_score, v_measure_score, calinski_harabaz_score, silhouette_score
 
 from data.data_set import get_data_set_class
 from data.io import write_csv, read_table_file
@@ -121,6 +121,7 @@ class ClusteringEvaluator(AbstractEvaluator):
     def evaluate_result(self, processed_count_file_path, result_dir, visualization, **kwargs):
         normalization = kwargs['normalization']
         transformation = kwargs['transformation']
+        clear_cache = kwargs['clear_cache']
 
         make_sure_dir_exists(os.path.join(result_dir, "files"))
         info = []
@@ -135,6 +136,9 @@ class ClusteringEvaluator(AbstractEvaluator):
         imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
 
         # Data transformations
+        if np.sum(imputed_data.values < 0) > 0:
+            log("Observed some negative values!")
+            imputed_data[imputed_data < 0] = 0
         imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
 
         # Save class details for future
@@ -143,7 +147,12 @@ class ClusteringEvaluator(AbstractEvaluator):
         # Evaluation
         metric_results = dict()
 
-        embedded_data = self._get_embeddings(imputed_data)
+        embedded_data_file_path = os.path.join(result_dir, "files", "embedded_data.pkl.gz")
+        if os.path.exists(embedded_data_file_path) and not clear_cache:
+            embedded_data = load_gzip_pickle(embedded_data_file_path)
+        else:
+            embedded_data = self._get_embeddings(imputed_data)
+            dump_gzip_pickle(embedded_data, embedded_data_file_path)
 
         log("Evaluating ...")
         for class_label in classes.index.values:
@@ -173,8 +182,8 @@ class ClusteringEvaluator(AbstractEvaluator):
                 metric_results.update({
                     'kmeans_on_%s_%s_adjusted_mutual_info_score' % (embedding_slug, class_label):
                         adjusted_mutual_info_score(class_names, clusters, average_method="arithmetic"),
-                    'kmeans_on_%s_%s_completeness_score' % (embedding_slug, class_label):
-                        completeness_score(class_names, clusters),
+                    'kmeans_on_%s_%s_v_measure_score' % (embedding_slug, class_label):
+                        v_measure_score(class_names, clusters),
                     'embedding_%s_%s_calinski_harabaz_score' % (embedding_slug, class_label):
                         calinski_harabaz_score(emb, class_names),
                     'embedding_%s_%s_silhouette_score' % (embedding_slug, class_label):

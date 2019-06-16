@@ -76,7 +76,7 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
         data_values = data.values
         for x in hvg_indices:
             for y in range(data.shape[1]):
-                if data_values[x, y] > min_expression:
+                if data_values[x, y] >= min_expression:
                     non_zero_locations.append((x, y))
         del data_values
 
@@ -138,6 +138,9 @@ class RandomMaskedLocationPredictionEvaluator(AbstractEvaluator):
 
         # Restore column names and order
         imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
+
+        # Replace negative values with zero
+        imputed_data = imputed_data.clip(lower=0)
 
         # Evaluation
         log_diff = np.abs(transformations["log"](data) - transformations["log"](imputed_data))
@@ -332,67 +335,43 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         # Restore column names and order
         imputed_data = rearrange_and_rename_columns(imputed_data, original_columns, column_permutation)
 
+        # Replace negative values with zero
+        imputed_data = imputed_data.clip(lower=0)
+
         # Data transformation
         scaled_data = transformations[transformation](scaled_data)
         imputed_data = transformations[transformation](imputed_data)
 
         # Evaluation
-        mse_distances = []
+        rmse_distances = []
         mae_distances = []
         euclidean_distances = []
-        sqeuclidean_distances = []
         cosine_distances = []
         correlation_distances = []
 
-        mse = float(np.sum(np.where(scaled_data.values > 0, 1, 0) * np.square(scaled_data.values - imputed_data.values)) /
-                    np.sum(np.where(scaled_data.values > 0, 1, 0)))
+        rmse = float(np.sum(np.where(scaled_data.values > 0, 1, 0) * np.square(scaled_data.values - imputed_data.values)) /
+                     np.sum(np.where(scaled_data.values > 0, 1, 0))) ** 0.5
         mae = float(np.sum(np.where(scaled_data.values > 0, 1, 0) * np.abs(scaled_data.values - imputed_data.values)) /
                     np.sum(np.where(scaled_data.values > 0, 1, 0)))
 
         for i in range(scaled_data.shape[1]):
-            x = scaled_data.values[:, i]
-            y = imputed_data.values[:, i]
-            mse_distances.append(float(np.sum(np.where(x > 0, 1, 0) * np.square(x - y)) /
-                                       np.sum(np.where(x > 0, 1, 0))))
-            mae_distances.append(float(np.sum(np.where(x > 0, 1, 0) * np.abs(x - y)) /
-                                       np.sum(np.where(x > 0, 1, 0))))
-            euclidean_distances.append(pdist(np.vstack((x, y)), 'euclidean')[0])
-            sqeuclidean_distances.append(pdist(np.vstack((x, y)), 'sqeuclidean')[0])
+            non_zeros = scaled_data.values[:, i] > 0
+            x = scaled_data.values[non_zeros, i]
+            y = imputed_data.values[non_zeros, i]
+            rmse_distances.append(float(np.sum(np.square(x - y)) / np.sum(non_zeros)) ** 0.5)
+            mae_distances.append(float(np.sum(np.abs(x - y)) / np.sum(non_zeros)))
             cosine_distances.append(pdist(np.vstack((x, y)), 'cosine')[0])
+            euclidean_distances.append(pdist(np.vstack((x, y)), 'euclidean')[0])
             correlation_distances.append(pdist(np.vstack((x, y)), 'correlation')[0])
-
-        pearson_corrs = []
-        spearman_corrs = []
-        pearson_corrs_on_nonzeros = []
-        spearman_corrs_on_nonzeros = []
-
-        for g in range(scaled_data.shape[0]):
-            x = scaled_data.values[g, :]
-            y = imputed_data.values[g, :]
-            nonzero_x_indices = np.nonzero(x > 0)[0]
-            pearson_corrs.append(pearsonr(x, y)[0])
-            spearman_corrs.append(spearmanr(x, y)[0])
-            if len(nonzero_x_indices) != 0 and np.std(x[nonzero_x_indices]) > 1e-10:
-                if np.std(y[nonzero_x_indices]) < 1e-10:
-                    pearson_corrs_on_nonzeros.append(0)
-                    spearman_corrs_on_nonzeros.append(0)
-                else:
-                    pearson_corrs_on_nonzeros.append(pearsonr(x[nonzero_x_indices], y[nonzero_x_indices])[0])
-                    spearman_corrs_on_nonzeros.append(spearmanr(x[nonzero_x_indices], y[nonzero_x_indices])[0])
 
         metric_results = {
             'all_mean_absolute_error_on_non_zeros': mae,
-            'all_mean_squared_error_on_non_zeros': mse,
-            'cell_mean_absolute_error_on_non_zeros': np.mean(mae_distances),
-            'cell_mean_squared_error_on_non_zeros': np.mean(mse_distances),
+            'all_root_mean_squared_error_on_non_zeros': rmse,
+            'cell_mean_mean_absolute_error_on_non_zeros': np.mean(mae_distances),
+            'cell_mean_root_mean_squared_error_on_non_zeros': np.mean(rmse_distances),
             'cell_mean_euclidean_distance': np.mean(euclidean_distances),
-            'cell_mean_sqeuclidean_distance': np.mean(sqeuclidean_distances),
             'cell_mean_cosine_distance': np.mean(cosine_distances),
             'cell_mean_correlation_distance': np.mean(correlation_distances),
-            'gene_mean_pearson_corrs': np.mean(pearson_corrs),
-            'gene_mean_spearman_corrs': np.mean(spearman_corrs),
-            'gene_mean_pearson_corrs_on_nonzeros': np.mean(pearson_corrs_on_nonzeros),
-            'gene_mean_spearman_corrs_on_nonzeros': np.mean(spearman_corrs_on_nonzeros),
         }
 
         # Save results to a file
@@ -403,13 +382,13 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
                 file.write("%s\t%4f\n" % (metric, float(metric_results[metric])))
 
             file.write("##\n## ADDITIONAL INFO:\n")
-            file.write("# CELL\tmean_squared_error_on_non_zeros\tmean_euclidean_distance\t"
-                       "mean_sqeuclidean_distance\tmean_cosine_distance\tmean_correlation_distance:\n")
+            file.write("# CELL\troot_mean_squared_error_on_non_zeros\tmean_absolute_error_on_non_zeros\t"
+                       "euclidean_distance_on_non_zeros\tcosine_distance_on_non_zeros\tcorrelation_distance_on_non_zeros:\n")
             for i in range(scaled_data.shape[1]):
                 file.write("# %s\t%f\t%f\t%f\t%f\t%f\n" % (scaled_data.columns.values[i],
-                                                           mse_distances[i],
+                                                           rmse_distances[i],
+                                                           mae_distances[i],
                                                            euclidean_distances[i],
-                                                           sqeuclidean_distances[i],
                                                            cosine_distances[i],
                                                            correlation_distances[i]))
 

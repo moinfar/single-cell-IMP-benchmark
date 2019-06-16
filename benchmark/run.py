@@ -118,6 +118,8 @@ def generate_parser():
                                             help='Normalization to be applied before transformation and evaluation.')
     parser_evaluate_cell_cycle.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
                                             help='Transformation to be applied before evaluation.')
+    parser_evaluate_cell_cycle.add_argument('--clear-cache', '--cc', action='store_true',
+                                            help='Clear embedding cache if available.')
 
     parser_evaluate_clustering = subparsers_evaluate.add_parser('clustering')
     parser_evaluate_clustering.set_defaults(function=evaluate_clustering_test)
@@ -125,6 +127,8 @@ def generate_parser():
                                             help='Normalization to be applied before transformation and evaluation.')
     parser_evaluate_clustering.add_argument('--transformation', "-t", choices=['none', 'log', 'sqrt'], default='log',
                                             help='Transformation to be applied before evaluation.')
+    parser_evaluate_clustering.add_argument('--clear-cache', '--cc', action='store_true',
+                                            help='Clear embedding cache if available.')
 
     parser_evaluate_random_mask = subparsers_evaluate.add_parser('random-mask')
     parser_evaluate_random_mask.set_defaults(function=evaluate_random_mask_test)

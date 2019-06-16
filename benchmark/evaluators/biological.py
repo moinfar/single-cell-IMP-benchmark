@@ -8,7 +8,7 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA, TruncatedSVD, FastICA
 from sklearn.manifold import TSNE
 from sklearn.metrics import calinski_harabaz_score, silhouette_score, accuracy_score
-from sklearn.metrics.cluster import adjusted_mutual_info_score, completeness_score
+from sklearn.metrics.cluster import adjusted_mutual_info_score, v_measure_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -68,7 +68,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         # Load dataset
         data = self._load_and_combine_data()
 
-        # Remove some rows
+        # Remove some rows and columns
         if rm_ercc:
             remove_list = [symbol for symbol in data.index.values if symbol.startswith("ERCC-")]
             data = data.drop(remove_list)
@@ -78,6 +78,9 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         if rm_lq:
             remove_list = data.columns.values[data.sum(axis=0) < 1e6]
             data = data.drop(columns=remove_list)
+        # Remove empty rows
+        remove_list = data.index.values[data.sum(axis=1) == 0]
+        data = data.drop(remove_list)
 
         # Shuffle columns
         new_data, original_columns, column_permutation = shuffle_and_rename_columns(data, disabled=preserve_columns)
@@ -194,6 +197,7 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
     def evaluate_result(self, processed_count_file, result_dir, visualization, **kwargs):
         normalization = kwargs['normalization']
         transformation = kwargs['transformation']
+        clear_cache = kwargs['clear_cache']
 
         make_sure_dir_exists(os.path.join(result_dir, "files"))
         info = []
@@ -201,6 +205,10 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         data, imputed_data = self._load_data_and_imputed_data_for_evaluation(processed_count_file)
         gold_standard_classes = [column_name.split("_")[0] for column_name in data.columns.values]
 
+        # Data transformations
+        if np.sum(imputed_data.values < 0) > 0:
+            log("Observed some negative values!")
+            imputed_data[imputed_data < 0] = 0
         imputed_data = transformations[transformation](normalizations[normalization](imputed_data))
 
         G1_S_related_part_of_imputed_data, G2_M_related_part_of_imputed_data = self._get_related_part(imputed_data)
@@ -225,7 +233,12 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
         svm_results, knn_results = self._get_classification_results(related_part_of_imputed_data,
                                                                     gold_standard_classes)
 
-        embedded_data = self._get_embeddings(related_part_of_imputed_data)
+        embedded_data_file_path = os.path.join(result_dir, "files", "embedded_data.pkl.gz")
+        if os.path.exists(embedded_data_file_path) and not clear_cache:
+            embedded_data = load_gzip_pickle(embedded_data_file_path)
+        else:
+            embedded_data = self._get_embeddings(related_part_of_imputed_data)
+            dump_gzip_pickle(embedded_data, embedded_data_file_path)
 
         metric_results = {
             "classification_svm_mean_accuracy": np.mean(svm_results),
@@ -257,13 +270,28 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
             metric_results.update({
                 'kmeans_on_%s_adjusted_mutual_info_score' % embedding_slug:
                     adjusted_mutual_info_score(gold_standard_classes, clusters, average_method="arithmetic"),
-                'kmeans_on_%s_completeness_score' % embedding_slug:
-                    completeness_score(gold_standard_classes, clusters),
-                'kmeans_on_%s_calinski_harabaz_score' % embedding_slug:
+                'kmeans_on_%s_v_measure_score' % embedding_slug:
+                    v_measure_score(gold_standard_classes, clusters),
+                'embedding_%s_calinski_harabaz_score' % embedding_slug:
                     calinski_harabaz_score(emb, gold_standard_classes),
                 'embedding_%s_silhouette_score' % embedding_slug:
                     silhouette_score(emb, gold_standard_classes)
             })
+        
+        k_means = KMeans(n_clusters=3)
+        k_means.fit(related_part_of_imputed_data.transpose().values)
+        clusters = k_means.predict(related_part_of_imputed_data.transpose().values)
+        
+        metric_results.update({
+            'kmeans_on_related_genes_adjusted_mutual_info_score':
+                adjusted_mutual_info_score(gold_standard_classes, clusters, average_method="arithmetic"),
+            'kmeans_on_related_genes_v_measure_score':
+                v_measure_score(gold_standard_classes, clusters),
+            'embedding_related_genes_calinski_harabaz_score':
+                calinski_harabaz_score(related_part_of_imputed_data.transpose().values, gold_standard_classes),
+            'embedding_related_genes_silhouette_score':
+                silhouette_score(related_part_of_imputed_data.transpose().values, gold_standard_classes)
+        })
 
         write_csv(pd.DataFrame(info), os.path.join(result_dir, "files", "info.csv"))
 
