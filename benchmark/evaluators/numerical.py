@@ -270,6 +270,7 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
     def generate_test_bench(self, count_file_path, **kwargs):
         n_samples = kwargs['n_samples']
         read_ratio = kwargs['read_ratio']
+        replce = kwargs['replace']
         preserve_columns = kwargs['preserve_columns']
 
         count_file_path = os.path.abspath(count_file_path)
@@ -281,7 +282,7 @@ class DownSampledDataReconstructionEvaluator(AbstractEvaluator):
         data_cumsum = np.reshape(np.cumsum(data_values), data_values.shape)
 
         # Sample from original dataset
-        new_reads = np.sort(np.random.choice(n_all_reads, int(read_ratio * n_all_reads), replace=False))
+        new_reads = np.sort(np.random.choice(n_all_reads, int(read_ratio * n_all_reads), replace=replce))
 
         low_quality_data = np.zeros_like(data_values)
         read_index = 0

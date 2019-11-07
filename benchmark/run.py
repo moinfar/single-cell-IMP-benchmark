@@ -88,6 +88,8 @@ def generate_parser():
                                              type=int, default=0,
                                              help='Number of samples (cells) used from dataset'
                                                   '(Enter 0 to use all samples.)')
+    parser_generate_down_sample.add_argument('--replace', action='store_true',
+                                             help='Add in case of random replacement')
 
     parser_generate_paired_data = subparsers_generate.add_parser('paired-data')
     parser_generate_paired_data.set_defaults(function=generate_paired_data_test)

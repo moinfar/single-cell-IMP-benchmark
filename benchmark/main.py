@@ -49,7 +49,7 @@ def generate_down_sample_test(args):
     evaluator.prepare()
     evaluator.set_seed(args.seed)
     evaluator.generate_test_bench(args.output, preserve_columns=args.preserve_columns, n_samples=args.n_samples,
-                                  read_ratio=args.read_ratio)
+                                  read_ratio=args.read_ratio, replace=args.replace)
 
 
 def generate_paired_data_test(args):

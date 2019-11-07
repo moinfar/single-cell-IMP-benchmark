@@ -245,6 +245,8 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
             "classification_knn_mean_accuracy": np.mean(knn_results)
         }
 
+        embedded_data["identity"] = related_part_of_imputed_data.transpose()
+
         for i, embedding_name in enumerate(embedded_data):
             emb = embedded_data[embedding_name]
 
@@ -254,18 +256,19 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
 
             embedding_slug = embedding_name.replace(" ", "_").lower()
 
-            embedding_df = pd.DataFrame({"X": emb[:, 0],
-                                         "Y": emb[:, 1],
-                                         "class": gold_standard_classes,
-                                         "k_means_clusters": clusters}, index=data.columns.values)
-            write_csv(embedding_df, os.path.join(result_dir, "files", "%s.csv" % embedding_slug))
-            info.append({'filename': "%s.csv" % embedding_slug,
-                         'description': '%s embedding of cells considering genes related '
-                                        'to cell-cycle' % embedding_name,
-                         'plot_description': '%s embedding of cells considering genes related '
-                                             'to cell-cycle (K-means clusters are marked '
-                                             'with different shapes)' % embedding_name,
-                         })
+            if embedding_name != "identity":
+                embedding_df = pd.DataFrame({"X": emb[:, 0],
+                                             "Y": emb[:, 1],
+                                             "class": gold_standard_classes,
+                                             "k_means_clusters": clusters}, index=data.columns.values)
+                write_csv(embedding_df, os.path.join(result_dir, "files", "%s.csv" % embedding_slug))
+                info.append({'filename': "%s.csv" % embedding_slug,
+                             'description': '%s embedding of cells considering genes related '
+                                            'to cell-cycle' % embedding_name,
+                             'plot_description': '%s embedding of cells considering genes related '
+                                                 'to cell-cycle (K-means clusters are marked '
+                                                 'with different shapes)' % embedding_name,
+                             })
 
             metric_results.update({
                 'kmeans_on_%s_adjusted_mutual_info_score' % embedding_slug:
@@ -277,21 +280,6 @@ class CellCyclePreservationEvaluator(AbstractEvaluator):
                 'embedding_%s_silhouette_score' % embedding_slug:
                     silhouette_score(emb, gold_standard_classes)
             })
-        
-        k_means = KMeans(n_clusters=3)
-        k_means.fit(related_part_of_imputed_data.transpose().values)
-        clusters = k_means.predict(related_part_of_imputed_data.transpose().values)
-        
-        metric_results.update({
-            'kmeans_on_related_genes_adjusted_mutual_info_score':
-                adjusted_mutual_info_score(gold_standard_classes, clusters, average_method="arithmetic"),
-            'kmeans_on_related_genes_v_measure_score':
-                v_measure_score(gold_standard_classes, clusters),
-            'embedding_related_genes_calinski_harabaz_score':
-                calinski_harabaz_score(related_part_of_imputed_data.transpose().values, gold_standard_classes),
-            'embedding_related_genes_silhouette_score':
-                silhouette_score(related_part_of_imputed_data.transpose().values, gold_standard_classes)
-        })
 
         write_csv(pd.DataFrame(info), os.path.join(result_dir, "files", "info.csv"))
 
